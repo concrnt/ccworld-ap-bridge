@@ -1,24 +1,26 @@
 package api
 
 import (
-    "crypto/rand"
-    "log"
-    "strings"
-    "errors"
-    "context"
-    "encoding/json"
+	"context"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 
-	"github.com/totegamma/concurrent/core"
-    "github.com/concrnt/ccworld-ap-bridge/types"
-    "github.com/concrnt/ccworld-ap-bridge/store"
+	// "github.com/totegamma/concurrent/core"
+	"github.com/concrnt/ccworld-ap-bridge/store"
+	"github.com/concrnt/ccworld-ap-bridge/types"
 )
 
 type Service struct {
-    store store.Store
-    config core.Config
+	store *store.Store
+}
+
+func NewService(store *store.Store) *Service {
+	return &Service{
+		store,
+	}
 }
 
 func (s *Service) GetPerson(ctx context.Context, id string) (types.ApPerson, error) {
@@ -28,36 +30,36 @@ func (s *Service) GetPerson(ctx context.Context, id string) (types.ApPerson, err
 	person, err := s.store.GetPersonByID(ctx, id)
 	if err != nil {
 		span.RecordError(err)
-        return types.ApPerson{}, err
+		return types.ApPerson{}, err
 	}
 
-    return person, nil
+	return person, nil
 }
 
 func (s *Service) UpdatePerson(ctx context.Context, requester string, person types.ApPerson) (types.ApPerson, error) {
-    ctx, span := tracer.Start(ctx, "Api.Service.UpdatePerson")
-    defer span.End()
+	ctx, span := tracer.Start(ctx, "Api.Service.UpdatePerson")
+	defer span.End()
 
 	entity, err := s.store.GetEntityByCCID(ctx, requester)
 	if err != nil {
 		span.RecordError(err)
-        return types.ApPerson{}, err
+		return types.ApPerson{}, err
 	}
 
 	if entity.CCID != requester {
-        return types.ApPerson{}, errors.New("unauthorized")
+		return types.ApPerson{}, errors.New("unauthorized")
 	}
-
 
 	created, err := s.store.UpsertPerson(ctx, person)
 	if err != nil {
 		span.RecordError(err)
-        return types.ApPerson{}, err
+		return types.ApPerson{}, err
 	}
 
-    return created, nil
+	return created, nil
 }
 
+/*
 func (s *Service) Follow(ctx context.Context, requester, targetID string) (types.ApFollow, error) {
     ctx, span := tracer.Start(ctx, "Api.Service.Follow")
     defer span.End()
@@ -181,23 +183,18 @@ func (s *Service) UnFollow(ctx context.Context, requester, targetID string) (typ
 
     return deleted, nil
 }
+*/
 
-
-// CreateEntityRequest is a struct for a request to create an entity.
-type CreateEntityRequest struct {
-	ID                 string `json:"id"`
-}
-
-func (s *Service) CreateEntity(ctx context.Context, requester string, request CreateEntityRequest) (types.ApEntity, error) {
-    ctx, span := tracer.Start(ctx, "Api.Service.CreateEntity")
-    defer span.End()
+func (s *Service) CreateEntity(ctx context.Context, requester string, id string) (types.ApEntity, error) {
+	ctx, span := tracer.Start(ctx, "Api.Service.CreateEntity")
+	defer span.End()
 
 	// check if entity already exists
 	entity, err := s.store.GetEntityByCCID(ctx, requester)
 	if err == nil { // Already exists
 
-        entity.Privatekey = ""
-        return entity, nil
+		entity.Privatekey = ""
+		return entity, nil
 
 	} else { // Create
 
@@ -229,35 +226,32 @@ func (s *Service) CreateEntity(ctx context.Context, requester string, request Cr
 		)
 
 		created, err := s.store.CreateEntity(ctx, types.ApEntity{
-			ID:                 request.ID,
-			CCID:               requester,
-			Publickey:          string(pubKeyPEM),
-			Privatekey:         string(privKeyPEM),
+			ID:         id,
+			CCID:       requester,
+			Publickey:  string(pubKeyPEM),
+			Privatekey: string(privKeyPEM),
 		})
 		if err != nil {
 			span.RecordError(err)
-            return types.ApEntity{}, err
+			return types.ApEntity{}, err
 		}
 
 		created.Privatekey = ""
-        return created, nil
+		return created, nil
 	}
 }
 
-
 func (s *Service) GetEntityID(ctx context.Context, ccid string) (types.ApEntity, error) {
-    ctx, span := tracer.Start(ctx, "Api.Service.GetEntityID")
-    defer span.End()
+	ctx, span := tracer.Start(ctx, "Api.Service.GetEntityID")
+	defer span.End()
 
 	entity, err := s.store.GetEntityByCCID(ctx, ccid)
 	if err != nil {
 		span.RecordError(err)
-        return types.ApEntity{}, err
+		return types.ApEntity{}, err
 	}
 
 	entity.Privatekey = ""
 
-    return entity, nil
+	return entity, nil
 }
-
-

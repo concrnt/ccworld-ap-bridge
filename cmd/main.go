@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
-	"github.com/redis/go-redis/v9"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/redis/go-redis/v9"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 
 	"github.com/bradfitz/gomemcache/memcache"
 
@@ -15,7 +16,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 
-    "github.com/totegamma/concurrent/client"
+	"github.com/totegamma/concurrent/client"
 	"github.com/totegamma/concurrent/x/auth"
 
 	"github.com/redis/go-redis/extra/redisotel/v9"
@@ -29,10 +30,11 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 	"gorm.io/plugin/opentelemetry/tracing"
 
-    "github.com/concrnt/ccworld-ap-bridge/types"
-    "github.com/concrnt/ccworld-ap-bridge/store"
-    "github.com/concrnt/ccworld-ap-bridge/ap"
-    apmiddleware "github.com/concrnt/ccworld-ap-bridge/middleware"
+	"github.com/concrnt/ccworld-ap-bridge/ap"
+	"github.com/concrnt/ccworld-ap-bridge/api"
+	apmiddleware "github.com/concrnt/ccworld-ap-bridge/middleware"
+	"github.com/concrnt/ccworld-ap-bridge/store"
+	"github.com/concrnt/ccworld-ap-bridge/types"
 )
 
 var (
@@ -50,7 +52,7 @@ func main() {
 	if ConfPath == "" {
 		ConfPath = "/etc/concurrent/activitypub.yaml"
 	}
-    config.Load(ConfPath)
+	config.Load(ConfPath)
 
 	log.Print("ConcurrentWorld Activitypub Bridge ", version, " starting...")
 	log.Print("ApConfig loaded! Proxy: ", config.ApConfig.ProxyCCID)
@@ -131,24 +133,29 @@ func main() {
 		panic("failed to setup tracing plugin")
 	}
 
+	storeService := store.NewStore(db)
+	client := client.NewClient()
+	apService := ap.NewService(
+		storeService,
+		&client,
+		config.NodeInfo,
+		config.ApConfig,
+	)
 
-    storeService := store.NewStore(db)
-    client := client.NewClient()
-    apService := ap.NewService(
-        storeService,
-        &client,
-        config.NodeInfo,
-        config.ApConfig,
-    )
+	apiService := api.NewService(storeService)
+	apiHandler := api.NewHandler(apiService)
 
-    apHandler := ap.NewHandler(apService)
-
+	apHandler := ap.NewHandler(apService)
 
 	e.GET("/.well-known/webfinger", apHandler.WebFinger)
 	e.GET("/.well-known/nodeinfo", apHandler.NodeInfoWellKnown)
 
 	ap := e.Group("/ap")
 	ap.GET("/nodeinfo/2.0", apHandler.NodeInfo)
+	ap.GET("/acct/:id", apHandler.User)
+
+	ap.GET("/api/entity/:ccid", apiHandler.GetEntityID)
+	ap.POST("/api/entity", apiHandler.CreateEntity, auth.Restrict(auth.ISLOCAL)) // ISLOCAL
 
 	e.GET("/health", func(c echo.Context) (err error) {
 		ctx := c.Request().Context()

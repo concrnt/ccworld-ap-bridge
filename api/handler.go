@@ -1,20 +1,24 @@
 package api
 
 import (
-    "log"
 	"github.com/labstack/echo/v4"
 	"go.opentelemetry.io/otel"
 	"net/http"
 
+	"github.com/concrnt/ccworld-ap-bridge/types"
 	"github.com/totegamma/concurrent/core"
-    "github.com/concrnt/ccworld-ap-bridge/types"
 )
 
 var tracer = otel.Tracer("api")
 
-// Handler is the API handler.
 type Handler struct {
-    service Service
+	service *Service
+}
+
+func NewHandler(service *Service) Handler {
+	return Handler{
+		service,
+	}
 }
 
 func (h Handler) GetPerson(c echo.Context) error {
@@ -26,11 +30,11 @@ func (h Handler) GetPerson(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid username")
 	}
 
-    person, err := h.service.GetPerson(ctx, id)
-    if err != nil {
-        span.RecordError(err)
-        return c.String(http.StatusNotFound, "entity not found")
-    }
+	person, err := h.service.GetPerson(ctx, id)
+	if err != nil {
+		span.RecordError(err)
+		return c.String(http.StatusNotFound, "entity not found")
+	}
 
 	c.Response().Header().Set("Content-Type", "application/activity+json")
 	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": person})
@@ -41,29 +45,30 @@ func (h Handler) UpdatePerson(c echo.Context) error {
 	ctx, span := tracer.Start(c.Request().Context(), "UpdatePerson")
 	defer span.End()
 
-	requester, ok := c.Get(core.RequesterIdCtxKey).(string)
+	requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
 	if !ok {
 		return c.JSON(http.StatusForbidden, echo.Map{"status": "error", "message": "requester not found"})
 	}
 
 	var person types.ApPerson
-    err := c.Bind(&person)
+	err := c.Bind(&person)
 	if err != nil {
 		span.RecordError(err)
 		return c.String(http.StatusBadRequest, "Invalid request body")
 	}
 
-    created, err := h.service.UpdatePerson(ctx, requester, person)
+	created, err := h.service.UpdatePerson(ctx, requester, person)
 
 	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": created})
 }
 
+/*
 // Follow handles entity follow requests.
 func (h Handler) Follow(c echo.Context) error {
 	ctx, span := tracer.Start(c.Request().Context(), "Follow")
 	defer span.End()
 
-	requester, ok := c.Get(core.RequesterIdCtxKey).(string)
+	requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
 	if !ok {
 		return c.JSON(http.StatusForbidden, echo.Map{"status": "error", "message": "requester not found"})
 	}
@@ -93,7 +98,7 @@ func (h Handler) UnFollow(c echo.Context) error {
 	ctx, span := tracer.Start(c.Request().Context(), "Unfollow")
 	defer span.End()
 
-	requester, ok := c.Get(core.RequesterIdCtxKey).(string)
+	requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
 	if !ok {
 		return c.JSON(http.StatusForbidden, echo.Map{"status": "error", "message": "requester not found"})
 	}
@@ -108,8 +113,18 @@ func (h Handler) UnFollow(c echo.Context) error {
 	}
 
     deleted, err := h.service.UnFollow(ctx, requester, targetID)
+    if err != nil {
+        span.RecordError(err)
+        return c.String(http.StatusNotFound, "entity not found")
+    }
 
 	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": deleted})
+}
+*/
+
+// CreateEntityRequest is a struct for a request to create an entity.
+type CreateEntityRequest struct {
+	ID string `json:"id"`
 }
 
 // CreateEntity handles entity creation.
@@ -117,7 +132,7 @@ func (h Handler) CreateEntity(c echo.Context) error {
 	ctx, span := tracer.Start(c.Request().Context(), "CreateEntity")
 	defer span.End()
 
-	requester, ok := c.Get(core.RequesterIdCtxKey).(string)
+	requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
 	if !ok {
 		return c.JSON(http.StatusForbidden, echo.Map{"status": "error", "message": "requester not found"})
 	}
@@ -129,9 +144,9 @@ func (h Handler) CreateEntity(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid request body")
 	}
 
-    entity, err := h.service.CreateEntity(ctx, requester, request)
+	entity, err := h.service.CreateEntity(ctx, requester, request.ID)
 
-    return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": entity})
+	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": entity})
 }
 
 // GetEntityID handles entity id requests.
@@ -144,9 +159,11 @@ func (h Handler) GetEntityID(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid username")
 	}
 
-    entity, err 
-
+	entity, err := h.service.GetEntityID(ctx, ccid)
+	if err != nil {
+		span.RecordError(err)
+		return c.String(http.StatusNotFound, "entity not found")
+	}
 
 	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": entity})
 }
-

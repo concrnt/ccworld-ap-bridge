@@ -1,11 +1,10 @@
 package ap
 
 import (
-	"net/http"
 	"github.com/labstack/echo/v4"
 	"go.opentelemetry.io/otel"
-
-    // "github.com/concrnt/ccworld-ap-bridge/types"
+	"net/http"
+	// "github.com/concrnt/ccworld-ap-bridge/types"
 )
 
 var tracer = otel.Tracer("activitypub")
@@ -15,7 +14,7 @@ type Handler struct {
 }
 
 func NewHandler(service *Service) Handler {
-    return Handler{service}
+	return Handler{service}
 }
 
 func (h Handler) WebFinger(c echo.Context) error {
@@ -52,15 +51,15 @@ func (h Handler) NodeInfoWellKnown(c echo.Context) error {
 	ctx, span := tracer.Start(c.Request().Context(), "NodeInfoWellKnown")
 	defer span.End()
 
-    result, err := h.service.NodeInfoWellKnown(ctx)
+	result, err := h.service.NodeInfoWellKnown(ctx)
 
-    if err != nil {
-        span.RecordError(err)
-        return c.String(http.StatusInternalServerError, "Internal server error: "+err.Error())
-    }
+	if err != nil {
+		span.RecordError(err)
+		return c.String(http.StatusInternalServerError, "Internal server error: "+err.Error())
+	}
 
-    c.Response().Header().Set("Content-Type", "application/json")
-    return c.JSON(http.StatusOK, result)
+	c.Response().Header().Set("Content-Type", "application/json")
+	return c.JSON(http.StatusOK, result)
 }
 
 // --
@@ -74,25 +73,25 @@ func (h Handler) User(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid username")
 	}
 
-    /*
-	acceptHeader := c.Request().Header.Get("Accept")
-	accept := strings.Split(acceptHeader, ",")
+	/*
+		acceptHeader := c.Request().Header.Get("Accept")
+		accept := strings.Split(acceptHeader, ",")
 
-	// check if accept is application/activity+json or application/ld+json
-	if !slices.Contains(accept, "application/activity+json") && !slices.Contains(accept, "application/ld+json") {
-		// redirect to user page
-		return c.Redirect(http.StatusFound, "https://concurrent.world/entity/"+entity.CCID)
+		// check if accept is application/activity+json or application/ld+json
+		if !slices.Contains(accept, "application/activity+json") && !slices.Contains(accept, "application/ld+json") {
+			// redirect to user page
+			return c.Redirect(http.StatusFound, "https://concurrent.world/entity/"+entity.CCID)
+		}
+	*/
+
+	result, err := h.service.User(ctx, id)
+	if err != nil {
+		span.RecordError(err)
+		return c.String(http.StatusNotFound, "entity not found")
 	}
-    */
-
-    result, err := h.service.User(ctx, id)
-    if err != nil {
-        span.RecordError(err)
-        return c.String(http.StatusNotFound, "entity not found")
-    }
 
 	c.Response().Header().Set("Content-Type", "application/activity+json")
-    return c.JSON(http.StatusOK, result)
+	return c.JSON(http.StatusOK, result)
 
 }
 

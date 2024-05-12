@@ -16,9 +16,9 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 
-	"github.com/totegamma/concurrent/core"
-    "github.com/concrnt/ccworld-ap-bridge/types"
 	"github.com/concrnt/ccworld-ap-bridge/store"
+	"github.com/concrnt/ccworld-ap-bridge/types"
+	"github.com/totegamma/concurrent/core"
 )
 
 var (
@@ -28,11 +28,10 @@ var (
 var tracer = otel.Tracer("apclient")
 
 type ApClient struct {
-    mc     *memcache.Client
-    config core.Config
-    store store.Store
+	mc     *memcache.Client
+	config core.Config
+	store  store.Store
 }
-
 
 // FetchNote fetches a note from remote ap server.
 func (c ApClient) FetchNote(ctx context.Context, noteID string, execEntity types.ApEntity) (types.ApObject, error) {

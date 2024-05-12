@@ -10,7 +10,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 
-    "github.com/concrnt/ccworld-ap-bridge/types"
+	"github.com/concrnt/ccworld-ap-bridge/types"
 )
 
 var tracer = otel.Tracer("store")

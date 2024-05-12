@@ -36,7 +36,6 @@ type NodeInfo struct {
 	Metadata          NodeInfoMetadata `json:"metadata,omitempty" yaml:"metadata"`
 }
 
-
 // NodeInfoSoftware is a struct for the software field of a NodeInfo response.
 type NodeInfoSoftware struct {
 	Name    string `json:"name,omitempty" yaml:"name"`
@@ -57,9 +56,7 @@ type NodeInfoMetadataMaintainer struct {
 	Email string `json:"email,omitempty" yaml:"email"`
 }
 
-
 // ---------------------------------------------------------------------
-
 
 type ApObject struct {
 	Context           interface{}     `json:"@context,omitempty"`
@@ -80,7 +77,7 @@ type ApObject struct {
 	Icon              Icon            `json:"icon,omitempty"`
 	Image             Icon            `json:"image,omitempty"`
 	PublicKey         Key             `json:"publicKey,omitempty"`
-    Object            any             `json:"object,omitempty"`
+	Object            any             `json:"object,omitempty"`
 }
 
 type PersonEndpoints struct {
@@ -104,12 +101,10 @@ type Icon struct {
 
 // ---------------------------------------------------------------------
 
-
 type ApConfig struct {
-    FQDN string `yaml:"fqdn"`
+	FQDN      string `yaml:"fqdn"`
 	ProxyPriv string `yaml:"proxyPriv"`
 
 	// internal generated
-	ProxyCCID      string
+	ProxyCCID string
 }
-

@@ -5,28 +5,28 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/concrnt/ccworld-ap-bridge/types"
 	"github.com/concrnt/ccworld-ap-bridge/store"
+	"github.com/concrnt/ccworld-ap-bridge/types"
 	// "github.com/concrnt/ccworld-ap-bridge/apclient"
 	"github.com/totegamma/concurrent/client"
 )
 
 type Service struct {
-    store *store.Store
-    client *client.Client
-    // apclient apclient.ApClient
-    info types.NodeInfo
-    config types.ApConfig
+	store  *store.Store
+	client *client.Client
+	// apclient apclient.ApClient
+	info   types.NodeInfo
+	config types.ApConfig
 }
 
 func NewService(store *store.Store, client *client.Client, info types.NodeInfo, config types.ApConfig) *Service {
-    return &Service{
-        store,
-        client,
-        // apclient: apclient,
-        info,
-        config,
-    }
+	return &Service{
+		store,
+		client,
+		// apclient: apclient,
+		info,
+		config,
+	}
 }
 
 func (s *Service) WebFinger(ctx context.Context, resource string) (types.WebFinger, error) {
@@ -68,15 +68,15 @@ func (s *Service) WebFinger(ctx context.Context, resource string) (types.WebFing
 }
 
 func (s *Service) NodeInfo(ctx context.Context) (types.NodeInfo, error) {
-    _, span := tracer.Start(ctx, "Ap.Service.NodeInfo")
-    defer span.End()
+	_, span := tracer.Start(ctx, "Ap.Service.NodeInfo")
+	defer span.End()
 	return s.info, nil
 }
 
 func (s *Service) NodeInfoWellKnown(ctx context.Context) (types.WellKnown, error) {
-    _, span := tracer.Start(ctx, "Ap.Service.NodeInfoWellKnown")
-    defer span.End()
-    return types.WellKnown{
+	_, span := tracer.Start(ctx, "Ap.Service.NodeInfoWellKnown")
+	defer span.End()
+	return types.WellKnown{
 		Links: []types.WellKnownLink{
 			{
 				Rel:  "http://nodeinfo.diaspora.software/ns/schema/2.0",
@@ -89,20 +89,19 @@ func (s *Service) NodeInfoWellKnown(ctx context.Context) (types.WellKnown, error
 // -
 
 func (s *Service) User(ctx context.Context, id string) (types.ApObject, error) {
-    ctx, span := tracer.Start(ctx, "Ap.Service.User")
-    defer span.End()
-
+	ctx, span := tracer.Start(ctx, "Ap.Service.User")
+	defer span.End()
 
 	entity, err := s.store.GetEntityByID(ctx, id)
 	if err != nil {
 		span.RecordError(err)
-        return types.ApObject{}, err
+		return types.ApObject{}, err
 	}
 
 	person, err := s.store.GetPersonByID(ctx, id)
 	if err != nil {
 		span.RecordError(err)
-        return types.ApObject{}, err
+		return types.ApObject{}, err
 	}
 
 	return types.ApObject{
@@ -595,4 +594,3 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 
 }
 */
-

@@ -2,10 +2,10 @@ package types
 
 // ApEntity is a db model of an ActivityPub entity.
 type ApEntity struct {
-	ID                 string `json:"id" gorm:"type:text"`
-	CCID               string `json:"ccid" gorm:"type:char(42)"`
-	Publickey          string `json:"publickey" gorm:"type:text"`
-	Privatekey         string `json:"privatekey" gorm:"type:text"`
+	ID         string `json:"id" gorm:"type:text"`
+	CCID       string `json:"ccid" gorm:"type:char(42)"`
+	Publickey  string `json:"publickey" gorm:"type:text"`
+	Privatekey string `json:"privatekey" gorm:"type:text"`
 }
 
 // ApPerson is a db model of an ActivityPub entity.
