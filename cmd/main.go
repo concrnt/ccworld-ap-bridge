@@ -137,7 +137,7 @@ func main() {
 	client := client.NewClient()
 	apService := ap.NewService(
 		storeService,
-		&client,
+		client,
 		config.NodeInfo,
 		config.ApConfig,
 	)

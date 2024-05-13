@@ -2,24 +2,36 @@ package ap
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/concrnt/ccworld-ap-bridge/store"
 	"github.com/concrnt/ccworld-ap-bridge/types"
 	// "github.com/concrnt/ccworld-ap-bridge/apclient"
 	"github.com/totegamma/concurrent/client"
+	"github.com/totegamma/concurrent/core"
 )
 
 type Service struct {
 	store  *store.Store
-	client *client.Client
+	client client.Client
 	// apclient apclient.ApClient
 	info   types.NodeInfo
 	config types.ApConfig
 }
 
-func NewService(store *store.Store, client *client.Client, info types.NodeInfo, config types.ApConfig) *Service {
+func printJson(v interface{}) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Println(string(b))
+}
+
+func NewService(store *store.Store, client client.Client, info types.NodeInfo, config types.ApConfig) *Service {
 	return &Service{
 		store,
 		client,
@@ -88,6 +100,14 @@ func (s *Service) NodeInfoWellKnown(ctx context.Context) (types.WellKnown, error
 
 // -
 
+type worldprof struct {
+	Username    string   `json:"username"`
+	Avatar      string   `json:"avatar"`
+	Description string   `json:"description"`
+	Banner      string   `json:"banner"`
+	Subprofiles []string `json:"subprofiles"`
+}
+
 func (s *Service) User(ctx context.Context, id string) (types.ApObject, error) {
 	ctx, span := tracer.Start(ctx, "Ap.Service.User")
 	defer span.End()
@@ -98,7 +118,14 @@ func (s *Service) User(ctx context.Context, id string) (types.ApObject, error) {
 		return types.ApObject{}, err
 	}
 
-	person, err := s.store.GetPersonByID(ctx, id)
+	profile, err := s.client.GetProfile(ctx, s.config.FQDN, entity.CCID+"/world.concrnt.p")
+	if err != nil {
+		span.RecordError(err)
+		return types.ApObject{}, err
+	}
+
+	var profileDocument core.ProfileDocument[worldprof]
+	err = json.Unmarshal([]byte(profile.Document), &profileDocument)
 	if err != nil {
 		span.RecordError(err)
 		return types.ApObject{}, err
@@ -115,13 +142,13 @@ func (s *Service) User(ctx context.Context, id string) (types.ApObject, error) {
 			SharedInbox: "https://" + s.config.FQDN + "/ap/inbox",
 		},
 		PreferredUsername: id,
-		Name:              person.Name,
-		Summary:           person.Summary,
+		Name:              profileDocument.Body.Username,
+		Summary:           profileDocument.Body.Description,
 		URL:               "https://" + s.config.FQDN + "/ap/acct/" + id,
 		Icon: types.Icon{
 			Type:      "Image",
 			MediaType: "image/png",
-			URL:       person.IconURL,
+			URL:       profileDocument.Body.Avatar,
 		},
 		PublicKey: types.Key{
 			ID:           "https://" + s.config.FQDN + "/ap/acct/" + id + "#main-key",
