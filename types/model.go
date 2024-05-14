@@ -63,6 +63,14 @@ type ApObject struct {
 	Actor             string          `json:"actor,omitempty"`
 	Type              string          `json:"type,omitempty"`
 	ID                string          `json:"id,omitempty"`
+	To                []string        `json:"to,omitempty"`
+	Tag               []Tag           `json:"tag,omitempty"`
+	Attachment        []Attachment    `json:"attachment,omitempty"`
+	InReplyTo         string          `json:"inReplyTo,omitempty"`
+	Content           string          `json:"content,omitempty"`
+	Published         string          `json:"published,omitempty"`
+	AttributedTo      string          `json:"attributedTo,omitempty"`
+	QuoteURL          string          `json:"quoteUrl,omitempty"`
 	Inbox             string          `json:"inbox,omitempty"`
 	Outbox            string          `json:"outbox,omitempty"`
 	SharedInbox       string          `json:"sharedInbox,omitempty"`
@@ -97,6 +105,21 @@ type Icon struct {
 	Type      string `json:"type,omitempty"`
 	MediaType string `json:"mediaType,omitempty"`
 	URL       string `json:"url,omitempty"`
+}
+
+// Attachment is a struct for an ActivityPub attachment.
+type Attachment struct {
+	Type      string `json:"type,omitempty"`
+	MediaType string `json:"mediaType,omitempty"`
+	URL       string `json:"url,omitempty"`
+}
+
+// Tag is a struct for an ActivityPub tag.
+type Tag struct {
+	Type string `json:"type,omitempty"`
+	ID   string `json:"id,omitempty"`
+	Name string `json:"name,omitempty"`
+	Icon Icon   `json:"icon,omitempty"`
 }
 
 // ---------------------------------------------------------------------

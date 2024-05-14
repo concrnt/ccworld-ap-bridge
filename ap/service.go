@@ -3,12 +3,16 @@ package ap
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"regexp"
 	"strings"
+	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/concrnt/ccworld-ap-bridge/store"
 	"github.com/concrnt/ccworld-ap-bridge/types"
+	"github.com/concrnt/ccworld-ap-bridge/world"
 	// "github.com/concrnt/ccworld-ap-bridge/apclient"
 	"github.com/totegamma/concurrent/client"
 	"github.com/totegamma/concurrent/core"
@@ -100,14 +104,6 @@ func (s *Service) NodeInfoWellKnown(ctx context.Context) (types.WellKnown, error
 
 // -
 
-type worldprof struct {
-	Username    string   `json:"username"`
-	Avatar      string   `json:"avatar"`
-	Description string   `json:"description"`
-	Banner      string   `json:"banner"`
-	Subprofiles []string `json:"subprofiles"`
-}
-
 func (s *Service) GetUserWebURL(ctx context.Context, id string) (string, error) {
 	ctx, span := tracer.Start(ctx, "Ap.Service.GetUserWebURL")
 	defer span.End()
@@ -137,7 +133,7 @@ func (s *Service) User(ctx context.Context, id string) (types.ApObject, error) {
 		return types.ApObject{}, err
 	}
 
-	var profileDocument core.ProfileDocument[worldprof]
+	var profileDocument core.ProfileDocument[world.Profile]
 	err = json.Unmarshal([]byte(profile.Document), &profileDocument)
 	if err != nil {
 		span.RecordError(err)
@@ -189,13 +185,7 @@ func (s *Service) Note(ctx context.Context, id string) (types.ApObject, error) {
 	ctx, span := tracer.Start(ctx, "Ap.Service.Note")
 	defer span.End()
 
-	msg, err := s.client.GetMessage(ctx, s.config.ProxyCCID, id)
-	if err != nil {
-		span.RecordError(err)
-		return types.ApObject{}, err
-	}
-
-	note, err := h.MessageToNote(ctx, id)
+	note, err := s.MessageToNote(ctx, id)
 	if err != nil {
 		span.RecordError(err)
 		return types.ApObject{}, err
@@ -643,5 +633,277 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 		return c.String(http.StatusOK, "OK but not implemented")
 	}
 
+}
+*/
+
+func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApObject, error) {
+	ctx, span := tracer.Start(ctx, "MessageToNote")
+	defer span.End()
+
+	message, err := s.client.GetMessage(ctx, s.config.FQDN, messageID)
+	if err != nil {
+		span.RecordError(err)
+		return types.ApObject{}, errors.New("message not found")
+	}
+
+	authorEntity, err := s.store.GetEntityByCCID(ctx, message.Author)
+	if err != nil {
+		span.RecordError(err)
+		return types.ApObject{}, errors.New("entity not found")
+	}
+
+	var document core.MessageDocument[world.MarkdownMessage]
+	err = json.Unmarshal([]byte(message.Document), &document)
+	if err != nil {
+		return types.ApObject{}, errors.New("invalid payload")
+	}
+
+	var emojis []types.Tag
+	var images []string
+
+	text := document.Body.Body
+
+	// extract image url of markdown notation
+	imagePattern := regexp.MustCompile(`!\[.*\]\((.*)\)`)
+	matches := imagePattern.FindAllStringSubmatch(text, -1)
+	for _, match := range matches {
+		images = append(images, match[1])
+	}
+
+	// remove markdown notation
+	text = imagePattern.ReplaceAllString(text, "")
+
+	if len(document.Body.Emojis) > 0 {
+		for k, v := range document.Body.Emojis {
+			//imageURL, ok := v.(map[string]interface{})["imageURL"].(string)
+			emoji := types.Tag{
+				ID:   v.ImageURL,
+				Type: "Emoji",
+				Name: ":" + k + ":",
+				Icon: types.Icon{
+					Type:      "Image",
+					MediaType: "image/png",
+					URL:       v.ImageURL,
+				},
+			}
+			emojis = append(emojis, emoji)
+		}
+	}
+
+	attachments := []types.Attachment{}
+	for _, imageURL := range images {
+		attachment := types.Attachment{
+			Type:      "Document",
+			MediaType: "image/png",
+			URL:       imageURL,
+		}
+		attachments = append(attachments, attachment)
+	}
+
+	if document.Schema == world.MarkdownMessageSchema { // Note
+
+		return types.ApObject{
+			Context:      "https://www.w3.org/ns/activitystreams",
+			Type:         "Note",
+			ID:           "https://" + s.config.FQDN + "/ap/note/" + message.ID,
+			AttributedTo: "https://" + s.config.FQDN + "/ap/acct/" + authorEntity.ID,
+			Content:      text,
+			Published:    document.SignedAt.Format(time.RFC3339),
+			To:           []string{"https://www.w3.org/ns/activitystreams#Public"},
+			Tag:          emojis,
+			Attachment:   attachments,
+		}, nil
+
+	} else if document.Schema == world.ReplyMessageSchema { // Reply
+
+		var replyDocument core.MessageDocument[world.ReplyMessage]
+		err = json.Unmarshal([]byte(message.Document), &replyDocument)
+		if err != nil {
+			return types.ApObject{}, errors.New("invalid payload")
+		}
+
+		replyAuthor, err := s.client.GetEntity(ctx, s.config.ProxyCCID, replyDocument.Body.ReplyToMessageAuthor)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, errors.New("entity not found")
+		}
+
+		replySource, err := s.client.GetMessage(ctx, replyAuthor.Domain, replyDocument.Body.ReplyToMessageID)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, errors.New("message not found")
+		}
+
+		var sourceDocument core.MessageDocument[world.MarkdownMessage]
+		err = json.Unmarshal([]byte(replySource.Document), &sourceDocument)
+		if err != nil {
+			return types.ApObject{}, errors.New("invalid payload")
+		}
+
+		replyMeta, ok := sourceDocument.Meta.(map[string]interface{})
+		if !ok {
+			return types.ApObject{}, errors.New("invalid meta")
+		}
+
+		ref, ok := replyMeta["apObjectRef"].(string)
+		if !ok {
+			ref = "https://" + replyAuthor.Domain + "/ap/note/" + replyDocument.Body.ReplyToMessageID
+		}
+
+		return types.ApObject{
+			Context:      "https://www.w3.org/ns/activitystreams",
+			Type:         "Note",
+			ID:           "https://" + s.config.FQDN + "/ap/note/" + message.ID,
+			AttributedTo: "https://" + s.config.FQDN + "/ap/acct/" + authorEntity.ID,
+			Content:      text,
+			InReplyTo:    ref,
+			To:           []string{"https://www.w3.org/ns/activitystreams#Public"},
+		}, nil
+
+	} else if document.Schema == world.RerouteMessageSchema { // Boost or Quote
+
+		var rerouteDocument core.MessageDocument[world.RerouteMessage]
+		err = json.Unmarshal([]byte(message.Document), &rerouteDocument)
+		if err != nil {
+			return types.ApObject{}, errors.New("invalid payload")
+		}
+
+		rerouteAuthor, err := s.client.GetEntity(ctx, s.config.ProxyCCID, rerouteDocument.Body.RerouteToMessageAuthor)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, errors.New("entity not found")
+		}
+
+		rerouteSource, err := s.client.GetMessage(ctx, rerouteAuthor.Domain, rerouteDocument.Body.RerouteToMessageID)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, errors.New("message not found")
+		}
+
+		var sourceDocument core.MessageDocument[world.MarkdownMessage]
+		err = json.Unmarshal([]byte(rerouteSource.Document), &sourceDocument)
+		if err != nil {
+			return types.ApObject{}, errors.New("invalid payload")
+		}
+
+		rerouteMeta, ok := sourceDocument.Meta.(map[string]interface{})
+		if !ok {
+			return types.ApObject{}, errors.New("invalid meta")
+		}
+
+		ref, ok := rerouteMeta["apObjectRef"].(string)
+		if !ok {
+			ref = "https://" + rerouteAuthor.Domain + "/ap/note/" + rerouteDocument.Body.RerouteToMessageID
+		}
+
+		if text == "" {
+			return types.ApObject{
+				Context: "https://www.w3.org/ns/activitystreams",
+				Type:    "Announce",
+				ID:      "https://" + s.config.FQDN + "/ap/note/" + message.ID,
+				Object:  ref,
+			}, nil
+		}
+
+		return types.ApObject{
+			Context:      "https://www.w3.org/ns/activitystreams",
+			Type:         "Note",
+			ID:           "https://" + s.config.FQDN + "/ap/note/" + message.ID,
+			AttributedTo: "https://" + s.config.FQDN + "/ap/acct/" + authorEntity.ID,
+			Content:      text,
+			QuoteURL:     ref,
+			To:           []string{"https://www.w3.org/ns/activitystreams#Public"},
+		}, nil
+	} else {
+		return types.ApObject{}, errors.New("invalid schema")
+	}
+}
+
+/*
+func (s Service) NoteToMessage(ctx context.Context, object Note, person Person, destStreams []string) (core.Message, error) {
+
+	content := object.Content
+
+	for _, attachment := range object.Attachment {
+		if attachment.Type == "Document" {
+			content += "\n\n![image](" + attachment.URL + ")"
+		}
+	}
+
+	var emojis map[string]WorldEmoji = make(map[string]WorldEmoji)
+	for _, tag := range object.Tag {
+		if tag.Type == "Emoji" {
+			name := strings.Trim(tag.Name, ":")
+			emojis[name] = WorldEmoji{
+				ImageURL: tag.Icon.URL,
+			}
+		}
+	}
+
+	if len(content) == 0 {
+		return core.Message{}, errors.New("empty note")
+	}
+
+	if len(content) > 4096 {
+		return core.Message{}, errors.New("note too long")
+	}
+
+	if object.Sensitive {
+		summary := "CW"
+		if object.Summary != "" {
+			summary = object.Summary
+		}
+		content = "<details>\n<summary>" + summary + "</summary>\n" + content + "\n</details>"
+	}
+
+	username := person.Name
+	if len(username) == 0 {
+		username = person.PreferredUsername
+	}
+
+	date, err := time.Parse(time.RFC3339Nano, object.Published)
+	if err != nil {
+		date = time.Now()
+	}
+
+	b := message.SignedObject{
+		Signer: h.apconfig.ProxyCCID,
+		Type:   "Message",
+		Schema: "https://raw.githubusercontent.com/totegamma/concurrent-schemas/master/messages/note/0.0.1.json",
+		Body: map[string]interface{}{
+			"body": content,
+			"profileOverride": map[string]interface{}{
+				"username":    username,
+				"avatar":      person.Icon.URL,
+				"description": person.Summary,
+				"link":        person.URL,
+			},
+			"emojis": emojis,
+		},
+		Meta: map[string]interface{}{
+			"apActor":          person.URL,
+			"apObjectRef":      object.ID,
+			"apPublisherInbox": person.Inbox,
+		},
+		SignedAt: date,
+	}
+
+	objb, err := json.Marshal(b)
+	if err != nil {
+		return core.Message{}, err
+	}
+
+	objstr := string(objb)
+	objsig, err := util.SignBytes(objb, h.apconfig.Proxy.PrivateKey)
+	if err != nil {
+		return core.Message{}, err
+	}
+
+	created, err := h.message.PostMessage(ctx, objstr, objsig, destStreams)
+	if err != nil {
+		return core.Message{}, err
+	}
+
+	return created, nil
 }
 */

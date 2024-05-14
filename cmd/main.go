@@ -153,6 +153,7 @@ func main() {
 	ap := e.Group("/ap")
 	ap.GET("/nodeinfo/2.0", apHandler.NodeInfo)
 	ap.GET("/acct/:id", apHandler.User)
+	ap.GET("/note/:id", apHandler.Note)
 
 	ap.GET("/api/entity/:ccid", apiHandler.GetEntityID)
 	ap.POST("/api/entity", apiHandler.CreateEntity, auth.Restrict(auth.ISLOCAL)) // ISLOCAL
