@@ -1,10 +1,12 @@
 package ap
 
 import (
+	"net/http"
+	"slices"
+	"strings"
+
 	"github.com/labstack/echo/v4"
 	"go.opentelemetry.io/otel"
-	"net/http"
-	// "github.com/concrnt/ccworld-ap-bridge/types"
 )
 
 var tracer = otel.Tracer("activitypub")
@@ -73,16 +75,19 @@ func (h Handler) User(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid username")
 	}
 
-	/*
-		acceptHeader := c.Request().Header.Get("Accept")
-		accept := strings.Split(acceptHeader, ",")
+	acceptHeader := c.Request().Header.Get("Accept")
+	accept := strings.Split(acceptHeader, ",")
 
-		// check if accept is application/activity+json or application/ld+json
-		if !slices.Contains(accept, "application/activity+json") && !slices.Contains(accept, "application/ld+json") {
-			// redirect to user page
-			return c.Redirect(http.StatusFound, "https://concurrent.world/entity/"+entity.CCID)
+	// check if accept is application/activity+json or application/ld+json
+	if !slices.Contains(accept, "application/activity+json") && !slices.Contains(accept, "application/ld+json") {
+		// redirect to user page
+		redirectURL, err := h.service.GetUserWebURL(ctx, id)
+		if err != nil {
+			span.RecordError(err)
+			return c.String(http.StatusNotFound, "entity not found")
 		}
-	*/
+		return c.Redirect(http.StatusFound, redirectURL)
+	}
 
 	result, err := h.service.User(ctx, id)
 	if err != nil {
@@ -95,7 +100,6 @@ func (h Handler) User(c echo.Context) error {
 
 }
 
-/*
 func (h Handler) Note(c echo.Context) error {
 	ctx, span := tracer.Start(c.Request().Context(), "Note")
 	defer span.End()
@@ -111,19 +115,26 @@ func (h Handler) Note(c echo.Context) error {
 
 	if !slices.Contains(accept, "application/activity+json") && !slices.Contains(accept, "application/ld+json") {
 		// redirect to user page
-		return c.Redirect(http.StatusFound, "https://concurrent.world/message/"+id+"@"+msg.Author)
+		redirectURL, err := h.service.GetNoteWebURL(ctx, id)
+		if err != nil {
+			span.RecordError(err)
+			return c.String(http.StatusNotFound, "note not found")
+		}
+
+		return c.Redirect(http.StatusFound, redirectURL)
 	}
 
-    result, err := h.service.Note(ctx, id)
-    if err != nil {
-        span.RecordError(err)
-        return c.String(http.StatusNotFound, "note not found")
-    }
+	result, err := h.service.Note(ctx, id)
+	if err != nil {
+		span.RecordError(err)
+		return c.String(http.StatusNotFound, "note not found")
+	}
 
 	c.Response().Header().Set("Content-Type", "application/activity+json")
 	return c.JSON(http.StatusOK, result)
 }
 
+/*
 func (h Handler) Inbox(c echo.Context) error {
 	ctx, span := tracer.Start(c.Request().Context(), "HandlerAPInbox")
 	defer span.End()

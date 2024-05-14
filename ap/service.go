@@ -108,6 +108,19 @@ type worldprof struct {
 	Subprofiles []string `json:"subprofiles"`
 }
 
+func (s *Service) GetUserWebURL(ctx context.Context, id string) (string, error) {
+	ctx, span := tracer.Start(ctx, "Ap.Service.GetUserWebURL")
+	defer span.End()
+
+	entity, err := s.store.GetEntityByID(ctx, id)
+	if err != nil {
+		span.RecordError(err)
+		return "", err
+	}
+	return "https://concurrent.world/entity/" + entity.CCID, nil
+
+}
+
 func (s *Service) User(ctx context.Context, id string) (types.ApObject, error) {
 	ctx, span := tracer.Start(ctx, "Ap.Service.User")
 	defer span.End()
@@ -159,26 +172,37 @@ func (s *Service) User(ctx context.Context, id string) (types.ApObject, error) {
 	}, nil
 }
 
-/*
-func (s *Service) Note(ctx context.Context, id string) (types.ApObject, error) {
-    ctx, span := tracer.Start(ctx, "Ap.Service.Note")
-    defer span.End()
+func (s *Service) GetNoteWebURL(ctx context.Context, id string) (string, error) {
+	ctx, span := tracer.Start(ctx, "Ap.Service.GetNoteWebURL")
+	defer span.End()
 
-	msg, err := s.client.GetMessage(ctx, s.apconfig.ProxyCCID, id)
+	msg, err := s.client.GetMessage(ctx, s.config.ProxyCCID, id)
 	if err != nil {
 		span.RecordError(err)
-        return types.ApObject{}, err
+		return "", err
+	}
+
+	return "https://concurrent.world/message/" + id + "@" + msg.Author, nil
+}
+
+func (s *Service) Note(ctx context.Context, id string) (types.ApObject, error) {
+	ctx, span := tracer.Start(ctx, "Ap.Service.Note")
+	defer span.End()
+
+	msg, err := s.client.GetMessage(ctx, s.config.ProxyCCID, id)
+	if err != nil {
+		span.RecordError(err)
+		return types.ApObject{}, err
 	}
 
 	note, err := h.MessageToNote(ctx, id)
 	if err != nil {
 		span.RecordError(err)
-        return types.ApObject{}, err
+		return types.ApObject{}, err
 	}
 
-    return note, nil
+	return note, nil
 }
-*/
 
 /*
 func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (types.ApObject, error) {
