@@ -73,7 +73,7 @@ func main() {
 	}
 
 	e.Use(echoprometheus.NewMiddleware("ccapi"))
-	e.Use(middleware.Logger())
+	//e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(auth.ReceiveGatewayAuthPropagation)
 
@@ -141,7 +141,7 @@ func main() {
 		config.ApConfig,
 	)
 
-	apiService := api.NewService(storeService)
+	apiService := api.NewService(storeService, apclient, config.ApConfig)
 	apiHandler := api.NewHandler(apiService)
 
 	apHandler := ap.NewHandler(apService)
@@ -158,7 +158,11 @@ func main() {
 	ap.POST("/inbox", apHandler.Inbox)
 
 	ap.GET("/api/entity/:ccid", apiHandler.GetEntityID)
-	ap.POST("/api/entity", apiHandler.CreateEntity, auth.Restrict(auth.ISLOCAL)) // ISLOCAL
+	ap.POST("/api/entity", apiHandler.CreateEntity, auth.Restrict(auth.ISLOCAL))      // ISLOCAL
+	ap.POST("/api/follow/:id", apiHandler.Follow, auth.Restrict(auth.ISLOCAL))        // ISLOCAL
+	ap.DELETE("/api/follow/:id", apiHandler.UnFollow, auth.Restrict(auth.ISLOCAL))    // ISLOCAL
+	ap.GET("/api/resolve/:id", apiHandler.ResolvePerson, auth.Restrict(auth.ISLOCAL)) // ISLOCAL
+	ap.GET("/api/stats", apiHandler.GetStats, auth.Restrict(auth.ISLOCAL))            // ISLOCAL
 
 	e.GET("/health", func(c echo.Context) (err error) {
 		ctx := c.Request().Context()
@@ -178,7 +182,7 @@ func main() {
 
 	e.GET("/metrics", echoprometheus.NewHandler())
 
-	e.Logger.Fatal(e.Start(":8001"))
+	e.Logger.Fatal(e.Start(":8070"))
 }
 
 func setupTraceProvider(endpoint string, serviceName string, serviceVersion string) (func(), error) {

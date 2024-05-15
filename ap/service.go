@@ -23,7 +23,7 @@ import (
 type Service struct {
 	store    *store.Store
 	client   client.Client
-	apclient apclient.ApClient
+	apclient *apclient.ApClient
 	info     types.NodeInfo
 	config   types.ApConfig
 }
@@ -40,7 +40,7 @@ func printJson(v interface{}) {
 func NewService(
 	store *store.Store,
 	client client.Client,
-	apclient apclient.ApClient,
+	apclient *apclient.ApClient,
 	info types.NodeInfo,
 	config types.ApConfig,
 ) *Service {

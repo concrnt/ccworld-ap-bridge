@@ -5,21 +5,33 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"log"
+	"strings"
 
 	// "github.com/totegamma/concurrent/core"
+	"github.com/concrnt/ccworld-ap-bridge/apclient"
 	"github.com/concrnt/ccworld-ap-bridge/store"
 	"github.com/concrnt/ccworld-ap-bridge/types"
 )
 
 type Service struct {
-	store *store.Store
+	store    *store.Store
+	apclient *apclient.ApClient
+	config   types.ApConfig
 }
 
-func NewService(store *store.Store) *Service {
+func NewService(
+	store *store.Store,
+	apclient *apclient.ApClient,
+	config types.ApConfig,
+) *Service {
 	return &Service{
 		store,
+		apclient,
+		config,
 	}
 }
 
@@ -59,28 +71,27 @@ func (s *Service) UpdatePerson(ctx context.Context, requester string, person typ
 	return created, nil
 }
 
-/*
 func (s *Service) Follow(ctx context.Context, requester, targetID string) (types.ApFollow, error) {
-    ctx, span := tracer.Start(ctx, "Api.Service.Follow")
-    defer span.End()
+	ctx, span := tracer.Start(ctx, "Api.Service.Follow")
+	defer span.End()
 
 	entity, err := s.store.GetEntityByCCID(ctx, requester)
 	if err != nil {
 		span.RecordError(err)
-        return types.ApFollow{}, err
+		return types.ApFollow{}, err
 	}
 
-	targetActor, err := ResolveActor(ctx, targetID)
+	targetActor, err := apclient.ResolveActor(ctx, targetID)
 	if err != nil {
 		log.Println("resolve actor error", err)
 		span.RecordError(err)
-        return types.ApFollow{}, err
+		return types.ApFollow{}, err
 	}
 
-	targetPerson, err := h.FetchPerson(ctx, targetActor, entity)
+	targetPerson, err := s.apclient.FetchPerson(ctx, targetActor, entity)
 	if err != nil {
 		span.RecordError(err)
-        return types.ApFollow{}, err
+		return types.ApFollow{}, err
 	}
 
 	simpleID := strings.Replace(targetID, "@", "-", -1)
@@ -95,11 +106,11 @@ func (s *Service) Follow(ctx context.Context, requester, targetID string) (types
 		ID:      followID,
 	}
 
-	err = h.PostToInbox(ctx, targetPerson.Inbox, followObject, entity)
+	err = s.apclient.PostToInbox(ctx, targetPerson.Inbox, followObject, entity)
 	if err != nil {
 		log.Println("post to inbox error", err)
 		span.RecordError(err)
-        return types.ApFollow{}, err
+		return types.ApFollow{}, err
 	}
 
 	follow := types.ApFollow{
@@ -108,26 +119,24 @@ func (s *Service) Follow(ctx context.Context, requester, targetID string) (types
 		SubscriberUserID:   entity.ID,
 	}
 
-	err = h.repo.SaveFollow(ctx, follow)
+	err = s.store.SaveFollow(ctx, follow)
 	if err != nil {
 		log.Println("save follow error", err)
 		span.RecordError(err)
-        return types.ApFollow{}, err
+		return types.ApFollow{}, err
 	}
 
-    return follow, nil
+	return follow, nil
 }
 
-
-
 func (s *Service) UnFollow(ctx context.Context, requester, targetID string) (types.ApFollow, error) {
-    ctx, span := tracer.Start(ctx, "Api.Service.UnFollow")
-    defer span.End()
+	ctx, span := tracer.Start(ctx, "Api.Service.UnFollow")
+	defer span.End()
 
 	entity, err := s.store.GetEntityByCCID(ctx, requester)
 	if err != nil {
 		span.RecordError(err)
-        return types.ApFollow{}, err
+		return types.ApFollow{}, err
 	}
 
 	simpleID := strings.Replace(targetID, "@", "-", -1)
@@ -135,16 +144,16 @@ func (s *Service) UnFollow(ctx context.Context, requester, targetID string) (typ
 	followID := "https://" + s.config.FQDN + "/follow/" + entity.ID + "/" + simpleID
 	log.Println("unfollow", followID)
 
-	targetActor, err := ResolveActor(ctx, targetID)
+	targetActor, err := apclient.ResolveActor(ctx, targetID)
 	if err != nil {
 		span.RecordError(err)
-        return types.ApFollow{}, err
+		return types.ApFollow{}, err
 	}
 
-	targetPerson, err := h.FetchPerson(ctx, targetActor, entity)
+	targetPerson, err := s.apclient.FetchPerson(ctx, targetActor, entity)
 	if err != nil {
 		span.RecordError(err)
-        return types.ApFollow{}, err
+		return types.ApFollow{}, err
 	}
 
 	undoObject := types.ApObject{
@@ -165,25 +174,24 @@ func (s *Service) UnFollow(ctx context.Context, requester, targetID string) (typ
 	undoJSON, err := json.Marshal(undoObject)
 	if err != nil {
 		span.RecordError(err)
-        return types.ApFollow{}, err
+		return types.ApFollow{}, err
 	}
 	log.Println(string(undoJSON))
 
-	err = h.PostToInbox(ctx, targetPerson.Inbox, undoObject, entity)
+	err = s.apclient.PostToInbox(ctx, targetPerson.Inbox, undoObject, entity)
 	if err != nil {
 		span.RecordError(err)
-        return types.ApFollow{}, err
+		return types.ApFollow{}, err
 	}
 
 	deleted, err := s.store.RemoveFollow(ctx, followID)
 	if err != nil {
 		span.RecordError(err)
-        return types.ApFollow{}, err
+		return types.ApFollow{}, err
 	}
 
-    return deleted, nil
+	return deleted, nil
 }
-*/
 
 func (s *Service) CreateEntity(ctx context.Context, requester string, id string) (types.ApEntity, error) {
 	ctx, span := tracer.Start(ctx, "Api.Service.CreateEntity")
@@ -254,4 +262,61 @@ func (s *Service) GetEntityID(ctx context.Context, ccid string) (types.ApEntity,
 	entity.Privatekey = ""
 
 	return entity, nil
+}
+
+func (s *Service) GetStats(ctx context.Context, id string) (types.AccountStats, error) {
+	ctx, span := tracer.Start(ctx, "Api.Service.GetStats")
+	defer span.End()
+
+	entity, err := s.store.GetEntityByCCID(ctx, id)
+	if err != nil {
+		span.RecordError(err)
+		return types.AccountStats{}, err
+	}
+
+	follows := make([]string, 0)
+	apFollows, err := s.store.GetFollows(ctx, entity.ID)
+	if err != nil {
+		span.RecordError(err)
+		return types.AccountStats{}, err
+	}
+	for _, f := range apFollows {
+		follows = append(follows, f.PublisherPersonURL)
+	}
+
+	followers := make([]string, 0)
+	apFollowers, err := s.store.GetFollowers(ctx, entity.ID)
+	if err != nil {
+		span.RecordError(err)
+		return types.AccountStats{}, err
+	}
+	for _, f := range apFollowers {
+		followers = append(followers, f.SubscriberPersonURL)
+	}
+
+	stats := types.AccountStats{
+		Follows:   follows,
+		Followers: followers,
+	}
+
+	return stats, nil
+}
+
+func (s *Service) ResolvePerson(ctx context.Context, id, requester string) (types.ApObject, error) {
+	ctx, span := tracer.Start(ctx, "Api.Service.ResolvePerson")
+	defer span.End()
+
+	entity, err := s.store.GetEntityByCCID(ctx, requester)
+	if err != nil {
+		span.RecordError(err)
+		return types.ApObject{}, err
+	}
+
+	person, err := s.apclient.FetchPerson(ctx, id, entity)
+	if err != nil {
+		span.RecordError(err)
+		return types.ApObject{}, err
+	}
+
+	return person, nil
 }

@@ -36,8 +36,8 @@ func NewApClient(
 	mc *memcache.Client,
 	store *store.Store,
 	config types.ApConfig,
-) ApClient {
-	return ApClient{
+) *ApClient {
+	return &ApClient{
 		mc,
 		store,
 		config,

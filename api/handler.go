@@ -3,7 +3,9 @@ package api
 import (
 	"github.com/labstack/echo/v4"
 	"go.opentelemetry.io/otel"
+	"log"
 	"net/http"
+	"net/url"
 
 	"github.com/concrnt/ccworld-ap-bridge/types"
 	"github.com/totegamma/concurrent/core"
@@ -62,7 +64,6 @@ func (h Handler) UpdatePerson(c echo.Context) error {
 	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": created})
 }
 
-/*
 // Follow handles entity follow requests.
 func (h Handler) Follow(c echo.Context) error {
 	ctx, span := tracer.Start(c.Request().Context(), "Follow")
@@ -84,11 +85,11 @@ func (h Handler) Follow(c echo.Context) error {
 
 	log.Println("follow", targetID)
 
-    follow, err := h.service.Follow(ctx, requester, targetID)
-    if err != nil {
-        span.RecordError(err)
-        return c.String(http.StatusNotFound, "entity not found")
-    }
+	follow, err := h.service.Follow(ctx, requester, targetID)
+	if err != nil {
+		span.RecordError(err)
+		return c.String(http.StatusNotFound, "entity not found")
+	}
 
 	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": follow})
 }
@@ -112,15 +113,14 @@ func (h Handler) UnFollow(c echo.Context) error {
 		targetID = "@" + targetID
 	}
 
-    deleted, err := h.service.UnFollow(ctx, requester, targetID)
-    if err != nil {
-        span.RecordError(err)
-        return c.String(http.StatusNotFound, "entity not found")
-    }
+	deleted, err := h.service.UnFollow(ctx, requester, targetID)
+	if err != nil {
+		span.RecordError(err)
+		return c.String(http.StatusNotFound, "entity not found")
+	}
 
 	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": deleted})
 }
-*/
 
 // CreateEntityRequest is a struct for a request to create an entity.
 type CreateEntityRequest struct {
@@ -166,4 +166,47 @@ func (h Handler) GetEntityID(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": entity})
+}
+
+func (h Handler) GetStats(c echo.Context) error {
+	ctx, span := tracer.Start(c.Request().Context(), "Api.Service.GetStats")
+	defer span.End()
+
+	requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
+	if !ok {
+		return c.JSON(http.StatusForbidden, echo.Map{"status": "error", "message": "requester not found"})
+	}
+
+	stats, err := h.service.GetStats(ctx, requester)
+	if err != nil {
+		span.RecordError(err)
+		return c.String(http.StatusNotFound, "entity not found")
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": stats})
+}
+
+func (h Handler) ResolvePerson(c echo.Context) error {
+	ctx, span := tracer.Start(c.Request().Context(), "Api.Service.ResolvePerson")
+	defer span.End()
+
+	encoded := c.Param("id")
+	if encoded == "" {
+		return c.String(http.StatusBadRequest, "Invalid username")
+	}
+
+	id, err := url.PathUnescape(encoded)
+	if err != nil {
+		return c.String(http.StatusBadRequest, "Invalid username")
+	}
+
+	requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
+	if !ok {
+		return c.JSON(http.StatusForbidden, echo.Map{"status": "error", "message": "requester not found"})
+	}
+
+	person, err := h.service.ResolvePerson(ctx, id, requester)
+
+	c.Response().Header().Set("Content-Type", "application/activity+json")
+	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": person})
 }

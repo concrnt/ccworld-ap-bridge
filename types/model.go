@@ -132,3 +132,8 @@ type ApConfig struct {
 	// internal generated
 	ProxyCCID string
 }
+
+type AccountStats struct {
+	Follows   []string `json:"follows"`
+	Followers []string `json:"followers"`
+}
