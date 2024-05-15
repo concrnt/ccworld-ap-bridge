@@ -2,6 +2,7 @@ package ap
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -51,6 +52,17 @@ func NewService(
 		info,
 		config,
 	}
+}
+
+func jsonPrint(title string, v interface{}) {
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Println("----- : " + title + " : -----")
+	fmt.Println(string(b))
+	fmt.Println("--------------------------------")
 }
 
 func (s *Service) WebFinger(ctx context.Context, resource string) (types.WebFinger, error) {
@@ -358,14 +370,27 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 			return types.ApObject{}, errors.New("Internal server error (json marshal error)")
 		}
 
-		signature, err := core.SignBytes(document, s.config.ProxyPriv)
+		signatureBytes, err := core.SignBytes(document, s.config.ProxyPriv)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.New("Internal server error (sign error)")
 		}
 
+		signature := hex.EncodeToString(signatureBytes)
+
+		commitObj := core.Commit{
+			Document:  string(document),
+			Signature: string(signature),
+		}
+
+		commit, err := json.Marshal(commitObj)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, errors.New("Internal server error (json marshal error)")
+		}
+
 		var created core.ResponseBase[core.Association]
-		_, err = s.client.Commit(ctx, string(document), string(signature), &created)
+		_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), &created)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.New("Internal server error (post association error)")
@@ -596,13 +621,26 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 				return types.ApObject{}, errors.New("Internal server error (json marshal error)")
 			}
 
-			signature, err := core.SignBytes(document, s.config.ProxyPriv)
+			signatureBytes, err := core.SignBytes(document, s.config.ProxyPriv)
 			if err != nil {
 				span.RecordError(err)
 				return types.ApObject{}, errors.New("Internal server error (sign error)")
 			}
 
-			_, err = s.client.Commit(ctx, string(document), string(signature), nil)
+			signature := hex.EncodeToString(signatureBytes)
+
+			commitObj := core.Commit{
+				Document:  string(document),
+				Signature: string(signature),
+			}
+
+			commit, err := json.Marshal(commitObj)
+			if err != nil {
+				span.RecordError(err)
+				return types.ApObject{}, errors.New("Internal server error (json marshal error)")
+			}
+
+			_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), nil)
 			if err != nil {
 				span.RecordError(err)
 				return types.ApObject{}, errors.New("Internal server error (delete like error)")
@@ -617,24 +655,19 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 
 		default:
 			// print request body
-			b, err := json.Marshal(object)
-			if err != nil {
-				span.RecordError(err)
-				return types.ApObject{}, errors.New("Internal server error (json marshal error)")
-			}
-			log.Println("Unhandled Undo Object", string(b))
+			jsonPrint("Unhandled Undo Object", object)
 			return types.ApObject{}, nil
 		}
 	case "Delete":
 		deleteObject, ok := object.Object.(map[string]interface{})
 		if !ok {
-			log.Println("Invalid delete object", object.Object)
-			return types.ApObject{}, errors.New("Invalid request body")
+			jsonPrint("Invalid delete object", object)
+			return types.ApObject{}, nil
 		}
 		deleteID, ok := deleteObject["id"].(string)
 		if !ok {
-			log.Println("Invalid delete object", object.Object)
-			return types.ApObject{}, errors.New("Invalid request body")
+			jsonPrint("Invalid delete object", object)
+			return types.ApObject{}, nil
 		}
 
 		deleteRef, err := s.store.GetApObjectReferenceByApObjectID(ctx, deleteID)
@@ -658,13 +691,26 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 			return types.ApObject{}, errors.New("Internal server error (json marshal error)")
 		}
 
-		signature, err := core.SignBytes(document, s.config.ProxyPriv)
+		signatureBytes, err := core.SignBytes(document, s.config.ProxyPriv)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.New("Internal server error (sign error)")
 		}
 
-		_, err = s.client.Commit(ctx, string(document), string(signature), nil)
+		signature := hex.EncodeToString(signatureBytes)
+
+		commitObj := core.Commit{
+			Document:  string(document),
+			Signature: string(signature),
+		}
+
+		commit, err := json.Marshal(commitObj)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, errors.New("Internal server error (json marshal error)")
+		}
+
+		_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), nil)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.New("Internal server error (delete error)")
@@ -679,12 +725,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 
 	default:
 		// print request body
-		b, err := json.Marshal(object)
-		if err != nil {
-			span.RecordError(err)
-			return types.ApObject{}, errors.New("Internal server error (json marshal error)")
-		}
-		log.Println("Unhandled Activitypub Object", string(b))
+		jsonPrint("Unhandled Activitypub Object", object)
 		return types.ApObject{}, nil
 	}
 
@@ -941,6 +982,7 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 			},
 			SignedAt: date,
 		},
+		Timelines: destStreams,
 	}
 
 	document, err := json.Marshal(doc)
@@ -948,13 +990,25 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 		return core.Message{}, errors.Wrap(err, "json marshal error")
 	}
 
-	signature, err := core.SignBytes(document, s.config.ProxyPriv)
+	signatureBytes, err := core.SignBytes(document, s.config.ProxyPriv)
 	if err != nil {
 		return core.Message{}, errors.Wrap(err, "sign error")
 	}
 
+	signature := hex.EncodeToString(signatureBytes)
+
+	commitObj := core.Commit{
+		Document:  string(document),
+		Signature: string(signature),
+	}
+
+	commit, err := json.Marshal(commitObj)
+	if err != nil {
+		return core.Message{}, errors.Wrap(err, "json marshal error")
+	}
+
 	var created core.ResponseBase[core.Message]
-	_, err = s.client.Commit(ctx, string(document), string(signature), &created)
+	_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), &created)
 	if err != nil {
 		return core.Message{}, err
 	}
