@@ -18,7 +18,6 @@ import (
 
 	"github.com/concrnt/ccworld-ap-bridge/store"
 	"github.com/concrnt/ccworld-ap-bridge/types"
-	"github.com/totegamma/concurrent/core"
 )
 
 var (
@@ -29,8 +28,20 @@ var tracer = otel.Tracer("apclient")
 
 type ApClient struct {
 	mc     *memcache.Client
-	config core.Config
-	store  store.Store
+	store  *store.Store
+	config types.ApConfig
+}
+
+func NewApClient(
+	mc *memcache.Client,
+	store *store.Store,
+	config types.ApConfig,
+) ApClient {
+	return ApClient{
+		mc,
+		store,
+		config,
+	}
 }
 
 // FetchNote fetches a note from remote ap server.

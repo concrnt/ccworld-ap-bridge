@@ -6,20 +6,14 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/redis/go-redis/v9"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-
 	"github.com/bradfitz/gomemcache/memcache"
-
 	"github.com/labstack/echo-contrib/echoprometheus"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-
+	"github.com/redis/go-redis/extra/redisotel/v9"
+	"github.com/redis/go-redis/v9"
 	"github.com/totegamma/concurrent/client"
 	"github.com/totegamma/concurrent/x/auth"
-
-	"github.com/redis/go-redis/extra/redisotel/v9"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -28,9 +22,12 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 	"gorm.io/plugin/opentelemetry/tracing"
 
 	"github.com/concrnt/ccworld-ap-bridge/ap"
+	"github.com/concrnt/ccworld-ap-bridge/apclient"
 	"github.com/concrnt/ccworld-ap-bridge/api"
 	apmiddleware "github.com/concrnt/ccworld-ap-bridge/middleware"
 	"github.com/concrnt/ccworld-ap-bridge/store"
@@ -135,9 +132,11 @@ func main() {
 
 	storeService := store.NewStore(db)
 	client := client.NewClient()
+	apclient := apclient.NewApClient(mc, storeService, config.ApConfig)
 	apService := ap.NewService(
 		storeService,
 		client,
+		apclient,
 		config.NodeInfo,
 		config.ApConfig,
 	)
@@ -153,7 +152,10 @@ func main() {
 	ap := e.Group("/ap")
 	ap.GET("/nodeinfo/2.0", apHandler.NodeInfo)
 	ap.GET("/acct/:id", apHandler.User)
+	ap.POST("/acct/:id/inbox", apHandler.Inbox)
 	ap.GET("/note/:id", apHandler.Note)
+
+	ap.POST("/inbox", apHandler.Inbox)
 
 	ap.GET("/api/entity/:ccid", apiHandler.GetEntityID)
 	ap.POST("/api/entity", apiHandler.CreateEntity, auth.Restrict(auth.ISLOCAL)) // ISLOCAL

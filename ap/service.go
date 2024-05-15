@@ -4,26 +4,28 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 
+	"github.com/concrnt/ccworld-ap-bridge/apclient"
 	"github.com/concrnt/ccworld-ap-bridge/store"
 	"github.com/concrnt/ccworld-ap-bridge/types"
 	"github.com/concrnt/ccworld-ap-bridge/world"
-	// "github.com/concrnt/ccworld-ap-bridge/apclient"
 	"github.com/totegamma/concurrent/client"
 	"github.com/totegamma/concurrent/core"
 )
 
 type Service struct {
-	store  *store.Store
-	client client.Client
-	// apclient apclient.ApClient
-	info   types.NodeInfo
-	config types.ApConfig
+	store    *store.Store
+	client   client.Client
+	apclient apclient.ApClient
+	info     types.NodeInfo
+	config   types.ApConfig
 }
 
 func printJson(v interface{}) {
@@ -35,11 +37,17 @@ func printJson(v interface{}) {
 	fmt.Println(string(b))
 }
 
-func NewService(store *store.Store, client client.Client, info types.NodeInfo, config types.ApConfig) *Service {
+func NewService(
+	store *store.Store,
+	client client.Client,
+	apclient apclient.ApClient,
+	info types.NodeInfo,
+	config types.ApConfig,
+) *Service {
 	return &Service{
 		store,
 		client,
-		// apclient: apclient,
+		apclient,
 		info,
 		config,
 	}
@@ -194,31 +202,30 @@ func (s *Service) Note(ctx context.Context, id string) (types.ApObject, error) {
 	return note, nil
 }
 
-/*
 func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (types.ApObject, error) {
-    ctx, span := tracer.Start(ctx, "Ap.Service.Inbox")
-    defer span.End()
+	ctx, span := tracer.Start(ctx, "Ap.Service.Inbox")
+	defer span.End()
 
 	switch object.Type {
 	case "Follow":
 
 		if id == "" {
 			log.Println("Invalid username")
-            return types.ApObject{}, errors.New("Invalid username")
+			return types.ApObject{}, errors.New("Invalid username")
 		}
 
 		entity, err := s.store.GetEntityByID(ctx, id)
 		if err != nil {
 			log.Println("entity not found", err)
 			span.RecordError(err)
-            return types.ApObject{}, errors.New("entity not found")
+			return types.ApObject{}, errors.New("entity not found")
 		}
 
 		requester, err := s.apclient.FetchPerson(ctx, object.Actor, entity)
 		if err != nil {
 			log.Println("error fetching person", err)
 			span.RecordError(err)
-            return types.ApObject{}, errors.New("Invalid request body")
+			return types.ApObject{}, errors.New("Invalid request body")
 		}
 		accept := types.ApObject{
 			Context: "https://www.w3.org/ns/activitystreams",
@@ -235,14 +242,14 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 		if err != nil {
 			log.Println("error posting to inbox", err)
 			span.RecordError(err)
-            return types.ApObject{}, errors.New("Internal server error")
+			return types.ApObject{}, errors.New("Internal server error")
 		}
 
 		// check follow already exists
 		_, err = s.store.GetFollowerByTuple(ctx, userID, requester.ID)
 		if err == nil {
 			log.Println("follow already exists")
-            return types.ApObject{}, nil
+			return types.ApObject{}, nil
 		}
 
 		// save follow
@@ -255,42 +262,43 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 		if err != nil {
 			log.Println("error saving follow", err)
 			span.RecordError(err)
-            return types.ApObject{}, errors.New("Internal server error(save follow error)")
+			return types.ApObject{}, errors.New("Internal server error(save follow error)")
 		}
 
-        return types.ApObject{}, nil
+		return types.ApObject{}, nil
 
 	case "Like":
-		targetID := strings.Replace(object.Object.(string), "https://"+h.config.FQDN+"/ap/note/", "", 1)
-		targetMsg, err := h.client.GetMessage(ctx, h.apconfig.ProxyCCID, targetID)
+		targetID := strings.Replace(object.Object.(string), "https://"+s.config.FQDN+"/ap/note/", "", 1)
+		targetMsg, err := s.client.GetMessage(ctx, s.config.ProxyCCID, targetID)
 		if err != nil {
 			span.RecordError(err)
-			return c.String(http.StatusOK, "message not found")
+			return types.ApObject{}, errors.New("message not found")
 		}
 
-		err = h.store.CreateApObjectReference(ctx, ApObjectReference{
+		err = s.store.CreateApObjectReference(ctx, types.ApObjectReference{
 			ApObjectID: object.ID,
 			CcObjectID: "",
 		})
 
 		if err != nil {
 			span.RecordError(err)
-			return c.String(http.StatusOK, "like already exists")
+			return types.ApObject{}, errors.New("like already exists")
 		}
 
-		entity, err := h.store.GetEntityByCCID(ctx, targetMsg.Author)
+		entity, err := s.store.GetEntityByCCID(ctx, targetMsg.Author)
 		if err != nil {
 			span.RecordError(err)
-			return c.String(http.StatusOK, "entity not found")
+			return types.ApObject{}, errors.New("entity not found")
 		}
 
-		person, err := h.FetchPerson(ctx, object.Actor, entity)
+		person, err := s.apclient.FetchPerson(ctx, object.Actor, entity)
 		if err != nil {
 			span.RecordError(err)
-			return c.String(http.StatusOK, "failed to fetch actor")
+			return types.ApObject{}, errors.New("failed to fetch actor")
 		}
 
-		var obj association.SignedObject
+		//var obj association.SignedObject
+		var doc core.AssociationDocument[world.ReactionAssociation] // ReactionはLikeを包含する
 
 		username := person.Name
 		if len(username) == 0 {
@@ -298,142 +306,146 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 		}
 
 		if (object.Tag == nil) || (object.Tag[0].Name[0] != ':') {
-			obj = association.SignedObject{
-				Signer: h.apconfig.ProxyCCID,
-				Type:   "Association",
-				Schema: "https://raw.githubusercontent.com/totegamma/concurrent-schemas/master/associations/like/0.0.1.json",
-				Body: map[string]interface{}{
-					"profileOverride": map[string]interface{}{
-						"username":    username,
-						"avatar":      person.Icon.URL,
-						"description": person.Summary,
-						"link":        object.Actor,
+			doc = core.AssociationDocument[world.ReactionAssociation]{
+				DocumentBase: core.DocumentBase[world.ReactionAssociation]{
+					Signer: s.config.ProxyCCID,
+					Type:   "association",
+					Schema: world.LikeAssociationSchema,
+					Body: world.ReactionAssociation{
+						ProfileOverride: world.ProfileOverride{
+							Username:    username,
+							Avatar:      person.Icon.URL,
+							Description: person.Summary,
+							Link:        object.Actor,
+						},
 					},
+					Meta: map[string]interface{}{
+						"apActor": object.Actor,
+					},
+					SignedAt: time.Now(),
 				},
-				Meta: map[string]interface{}{
-					"apActor": object.Actor,
-				},
-				SignedAt: time.Now(),
-				Target:   targetID,
+				Target: targetID,
 			}
 		} else {
-			obj = association.SignedObject{
-				Signer: h.apconfig.ProxyCCID,
-				Type:   "Association",
-				Schema: "https://raw.githubusercontent.com/totegamma/concurrent-schemas/master/associations/emoji/0.0.1.json",
-				Body: map[string]interface{}{
-					"shortcode": object.Tag[0].Name,
-					"imageUrl":  object.Tag[0].Icon.URL,
-					"profileOverride": map[string]interface{}{
-						"username":    username,
-						"avatar":      person.Icon.URL,
-						"description": person.Summary,
-						"link":        object.Actor,
+			doc = core.AssociationDocument[world.ReactionAssociation]{
+				DocumentBase: core.DocumentBase[world.ReactionAssociation]{
+					Signer: s.config.ProxyCCID,
+					Type:   "association",
+					Schema: world.ReactionAssociationSchema,
+					Body: world.ReactionAssociation{
+						Shortcode: object.Tag[0].Name,
+						ImageURL:  object.Tag[0].Icon.URL,
+						ProfileOverride: world.ProfileOverride{
+							Username:    username,
+							Avatar:      person.Icon.URL,
+							Description: person.Summary,
+							Link:        object.Actor,
+						},
 					},
+					Meta: map[string]interface{}{
+						"apActor": object.Actor,
+					},
+					SignedAt: time.Now(),
 				},
-				Meta: map[string]interface{}{
-					"apActor": object.Actor,
-				},
-				SignedAt: time.Now(),
-				Target:   targetID,
-				Variant:  object.Tag[0].Icon.URL,
+				Target:  targetID,
+				Variant: object.Tag[0].Icon.URL,
 			}
 		}
 
-		objb, err := json.Marshal(obj)
+		document, err := json.Marshal(doc)
 		if err != nil {
 			span.RecordError(err)
-			return c.String(http.StatusOK, "Internal server error (json marshal error)")
+			return types.ApObject{}, errors.New("Internal server error (json marshal error)")
 		}
 
-		objstr := string(objb)
-		objsig, err := util.SignBytes(objb, h.apconfig.Proxy.PrivateKey)
+		signature, err := core.SignBytes(document, s.config.ProxyPriv)
 		if err != nil {
 			span.RecordError(err)
-			return c.String(http.StatusOK, "Internal server error (sign error)")
+			return types.ApObject{}, errors.New("Internal server error (sign error)")
 		}
 
-		created, err := h.client.Commit(ctx, objstr, objsig)
+		var created core.ResponseBase[core.Association]
+		_, err = s.client.Commit(ctx, string(document), string(signature), &created)
 		if err != nil {
 			span.RecordError(err)
-			return c.String(http.StatusOK, "Internal server error (post association error)")
+			return types.ApObject{}, errors.New("Internal server error (post association error)")
 		}
 
 		// save reference
-		err = h.store.UpdateApObjectReference(ctx, ApObjectReference{
+		err = s.store.UpdateApObjectReference(ctx, types.ApObjectReference{
 			ApObjectID: object.ID,
-			CcObjectID: created.ID,
+			CcObjectID: created.Content.ID,
 		})
 
-		return c.String(http.StatusOK, "like accepted")
+		return types.ApObject{}, nil
 
 	case "Create":
 		createObject, ok := object.Object.(map[string]interface{})
 		if !ok {
 			log.Println("Invalid create object", object.Object)
-			return c.String(http.StatusBadRequest, "Invalid request body")
+			return types.ApObject{}, errors.New("Invalid request body")
 		}
 		createType, ok := createObject["type"].(string)
 		if !ok {
 			log.Println("Invalid create object", object.Object)
-			return c.String(http.StatusBadRequest, "Invalid request body")
+			return types.ApObject{}, errors.New("Invalid request body")
 		}
 		createID, ok := createObject["id"].(string)
 		if !ok {
 			log.Println("Invalid create object", object.Object)
-			return c.String(http.StatusBadRequest, "Invalid request body")
+			return types.ApObject{}, errors.New("Invalid request body")
 		}
 		switch createType {
 		case "Note":
 			// check if the note is already exists
-			_, err := h.store.GetApObjectReferenceByCcObjectID(ctx, createID)
+			_, err := s.store.GetApObjectReferenceByCcObjectID(ctx, createID)
 			if err == nil {
 				// already exists
 				log.Println("note already exists")
-				return c.String(http.StatusOK, "note already exists")
+				return types.ApObject{}, nil
 			}
 
 			// preserve reference
-			err = h.store.CreateApObjectReference(ctx, ApObjectReference{
+			err = s.store.CreateApObjectReference(ctx, types.ApObjectReference{
 				ApObjectID: createID,
 				CcObjectID: "",
 			})
 
 			if err != nil {
 				span.RecordError(err)
-				return c.String(http.StatusOK, "note already exists")
+				return types.ApObject{}, nil
 			}
 
 			// list up follows
-			follows, err := h.store.GetFollowsByPublisher(ctx, object.Actor)
+			follows, err := s.store.GetFollowsByPublisher(ctx, object.Actor)
 			if err != nil {
 				log.Println("Internal server error (get follows error)", err)
 				span.RecordError(err)
-				return c.String(http.StatusInternalServerError, "Internal server error (get follows error)")
+				return types.ApObject{}, errors.New("Internal server error (get follows error)")
 			}
 
-			var rep ApEntity
+			var rep types.ApEntity
 			destStreams := []string{}
 			for _, follow := range follows {
-				entity, err := h.store.GetEntityByID(ctx, follow.SubscriberUserID)
+				entity, err := s.store.GetEntityByID(ctx, follow.SubscriberUserID)
 				if err != nil {
 					log.Println("Internal server error (get entity error)", err)
 					span.RecordError(err)
 					continue
 				}
 				rep = entity
-				destStreams = append(destStreams, entity.FollowStream)
+				destStreams = append(destStreams, world.UserApStream+"@"+entity.CCID)
 			}
 
 			if len(destStreams) == 0 {
 				log.Println("No followers")
-				return c.String(http.StatusOK, "No followers")
+				return types.ApObject{}, nil
 			}
 
-			person, err := h.FetchPerson(ctx, object.Actor, rep)
+			person, err := s.apclient.FetchPerson(ctx, object.Actor, rep)
 			if err != nil {
 				span.RecordError(err)
-				return c.String(http.StatusBadRequest, "failed to fetch actor")
+				return types.ApObject{}, errors.New("failed to fetch actor")
 			}
 
 			// convertObject
@@ -441,77 +453,78 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 			if err != nil {
 				log.Println("Internal server error (json marshal error)", err)
 				span.RecordError(err)
-				return c.String(http.StatusInternalServerError, "Internal server error (json marshal error)")
+				return types.ApObject{}, errors.New("Internal server error (json marshal error)")
 			}
-			var note Note
+
+			var note types.ApObject
 			err = json.Unmarshal(noteBytes, &note)
 			if err != nil {
 				log.Println("Internal server error (json unmarshal error)", err)
 				span.RecordError(err)
-				return c.String(http.StatusInternalServerError, "Internal server error (json unmarshal error)")
+				return types.ApObject{}, errors.New("Internal server error (json unmarshal error)")
 			}
 
-			created, err := h.NoteToMessage(ctx, note, person, destStreams)
+			created, err := s.NoteToMessage(ctx, note, person, destStreams)
 
 			// save reference
-			err = h.store.UpdateApObjectReference(ctx, ApObjectReference{
+			err = s.store.UpdateApObjectReference(ctx, types.ApObjectReference{
 				ApObjectID: createID,
 				CcObjectID: created.ID,
 			})
 
-			return c.String(http.StatusOK, "note accepted")
+			return types.ApObject{}, nil
 		default:
 			// print request body
 			b, err := json.Marshal(object)
 			if err != nil {
 				span.RecordError(err)
-				return c.String(http.StatusInternalServerError, "Internal server error (json marshal error)")
+				return types.ApObject{}, errors.New("Internal server error (json marshal error)")
 			}
 			log.Println("Unhandled Create Object", string(b))
-			return c.String(http.StatusOK, "OK but not implemented")
+			return types.ApObject{}, nil
 		}
 
 	case "Accept":
 		acceptObject, ok := object.Object.(map[string]interface{})
 		if !ok {
 			log.Println("Invalid accept object", object.Object)
-			return c.String(http.StatusBadRequest, "Invalid request body")
+			return types.ApObject{}, errors.New("Invalid request body")
 		}
 		acceptType, ok := acceptObject["type"].(string)
 		if !ok {
 			log.Println("Invalid accept object", object.Object)
-			return c.String(http.StatusBadRequest, "Invalid request body")
+			return types.ApObject{}, errors.New("Invalid request body")
 		}
 		switch acceptType {
 		case "Follow":
 			objectID, ok := acceptObject["id"].(string)
 			if !ok {
 				log.Println("Invalid accept object", object.Object)
-				return c.String(http.StatusBadRequest, "Invalid request body")
+				return types.ApObject{}, errors.New("Invalid request body")
 			}
-			apFollow, err := h.store.GetFollowByID(ctx, objectID)
+			apFollow, err := s.store.GetFollowByID(ctx, objectID)
 			if err != nil {
 				span.RecordError(err)
-				return c.String(http.StatusNotFound, "follow not found")
+				return types.ApObject{}, errors.New("follow not found")
 			}
 			apFollow.Accepted = true
 
-			_, err = h.store.UpdateFollow(ctx, apFollow)
+			_, err = s.store.UpdateFollow(ctx, apFollow)
 			if err != nil {
 				span.RecordError(err)
-				return c.String(http.StatusInternalServerError, "Internal server error (update follow error)")
+				return types.ApObject{}, errors.New("Internal server error (update follow error)")
 			}
 
-			return c.String(http.StatusOK, "follow accepted")
+			return types.ApObject{}, nil
 		default:
 			// print request body
 			b, err := json.Marshal(object)
 			if err != nil {
 				span.RecordError(err)
-				return c.String(http.StatusInternalServerError, "Internal server error (json marshal error)")
+				return types.ApObject{}, errors.New("Internal server error (json marshal error)")
 			}
 			log.Println("Unhandled accept object", string(b))
-			return c.String(http.StatusOK, "OK but not implemented")
+			return types.ApObject{}, nil
 
 		}
 
@@ -519,12 +532,12 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 		undoObject, ok := object.Object.(map[string]interface{})
 		if !ok {
 			log.Println("Invalid undo object", object.Object)
-			return c.String(http.StatusBadRequest, "Invalid request body")
+			return types.ApObject{}, errors.New("Invalid request body")
 		}
 		undoType, ok := undoObject["type"].(string)
 		if !ok {
 			log.Println("Invalid undo object", object.Object)
-			return c.String(http.StatusBadRequest, "Invalid request body")
+			return types.ApObject{}, errors.New("Invalid request body")
 		}
 		switch undoType {
 		case "Follow":
@@ -532,109 +545,150 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 			remote, ok := undoObject["actor"].(string)
 			if !ok {
 				log.Println("Invalid undo object", object.Object)
-				return c.String(http.StatusBadRequest, "Invalid request body")
+				return types.ApObject{}, errors.New("Invalid request body")
 			}
 
 			obj, ok := undoObject["object"].(string)
 			if !ok {
 				log.Println("Invalid undo object", object.Object)
-				return c.String(http.StatusBadRequest, "Invalid request body")
+				return types.ApObject{}, errors.New("Invalid request body")
 			}
 
-			local := strings.TrimPrefix(obj, "https://"+h.config.FQDN+"/ap/acct/")
+			local := strings.TrimPrefix(obj, "https://"+s.config.FQDN+"/ap/acct/")
 
 			// check follow already deleted
-			_, err = h.store.GetFollowerByTuple(ctx, local, remote)
+			_, err := s.store.GetFollowerByTuple(ctx, local, remote)
 			if err != nil {
 				log.Println("follow already undoed", local, remote)
-				return c.String(http.StatusOK, "follow already undoed")
+				return types.ApObject{}, nil
 			}
-			_, err = h.store.RemoveFollower(ctx, local, remote)
+			_, err = s.store.RemoveFollower(ctx, local, remote)
 			if err != nil {
 				log.Println("remove follower failed error", err)
 				span.RecordError(err)
 			}
-			return c.String(http.StatusOK, "OK")
+			return types.ApObject{}, nil
 
 		case "Like":
 			likeID, ok := undoObject["id"].(string)
 			if !ok {
 				log.Println("Invalid undo object", object.Object)
-				return c.String(http.StatusOK, "Invalid request body")
+				return types.ApObject{}, errors.New("Invalid request body")
 			}
-			deleteRef, err := h.store.GetApObjectReferenceByApObjectID(ctx, likeID)
+			deleteRef, err := s.store.GetApObjectReferenceByApObjectID(ctx, likeID)
 			if err != nil {
 				span.RecordError(err)
-				return c.String(http.StatusNotFound, "like not found")
+				return types.ApObject{}, errors.New("like not found")
 			}
 
-			_, err = h.client.Commit(ctx, deleteRef.CcObjectID, h.apconfig.ProxyCCID) // TODO: ちゃんとdocumentを与える
-			if err != nil {
-				span.RecordError(err)
-				return c.String(http.StatusInternalServerError, "Internal server error (delete like error)")
+			doc := core.DeleteDocument{
+				DocumentBase: core.DocumentBase[any]{
+					Signer:   s.config.ProxyCCID,
+					Type:     "delete",
+					SignedAt: time.Now(),
+				},
+				Target: deleteRef.CcObjectID,
 			}
 
-			err = h.store.DeleteApObjectReference(ctx, deleteRef.ApObjectID)
+			document, err := json.Marshal(doc)
 			if err != nil {
 				span.RecordError(err)
-				return c.String(http.StatusInternalServerError, "Internal server error (delete reference error)")
+				return types.ApObject{}, errors.New("Internal server error (json marshal error)")
 			}
-			return c.String(http.StatusOK, "like undoed")
+
+			signature, err := core.SignBytes(document, s.config.ProxyPriv)
+			if err != nil {
+				span.RecordError(err)
+				return types.ApObject{}, errors.New("Internal server error (sign error)")
+			}
+
+			_, err = s.client.Commit(ctx, string(document), string(signature), nil)
+			if err != nil {
+				span.RecordError(err)
+				return types.ApObject{}, errors.New("Internal server error (delete like error)")
+			}
+
+			err = s.store.DeleteApObjectReference(ctx, deleteRef.ApObjectID)
+			if err != nil {
+				span.RecordError(err)
+				return types.ApObject{}, errors.New("Internal server error (delete reference error)")
+			}
+			return types.ApObject{}, nil
 
 		default:
 			// print request body
 			b, err := json.Marshal(object)
 			if err != nil {
 				span.RecordError(err)
-				return c.String(http.StatusInternalServerError, "Internal server error (json marshal error)")
+				return types.ApObject{}, errors.New("Internal server error (json marshal error)")
 			}
 			log.Println("Unhandled Undo Object", string(b))
-			return c.String(http.StatusOK, "OK but not implemented")
+			return types.ApObject{}, nil
 		}
 	case "Delete":
 		deleteObject, ok := object.Object.(map[string]interface{})
 		if !ok {
 			log.Println("Invalid delete object", object.Object)
-			return c.String(http.StatusOK, "Invalid request body")
+			return types.ApObject{}, errors.New("Invalid request body")
 		}
 		deleteID, ok := deleteObject["id"].(string)
 		if !ok {
 			log.Println("Invalid delete object", object.Object)
-			return c.String(http.StatusOK, "Invalid request body")
+			return types.ApObject{}, errors.New("Invalid request body")
 		}
 
-		deleteRef, err := h.store.GetApObjectReferenceByApObjectID(ctx, deleteID)
+		deleteRef, err := s.store.GetApObjectReferenceByApObjectID(ctx, deleteID)
 		if err != nil {
 			span.RecordError(err)
-			return c.String(http.StatusOK, "Object Already Deleted")
+			return types.ApObject{}, nil
 		}
 
-		_, err = h.client.Commit(ctx, deleteRef.CcObjectID)
-		if err != nil {
-			span.RecordError(err)
-			return c.String(http.StatusInternalServerError, "Internal server error (delete error)")
+		doc := core.DeleteDocument{
+			DocumentBase: core.DocumentBase[any]{
+				Signer:   s.config.ProxyCCID,
+				Type:     "delete",
+				SignedAt: time.Now(),
+			},
+			Target: deleteRef.CcObjectID,
 		}
 
-		err = h.store.DeleteApObjectReference(ctx, deleteRef.ApObjectID)
+		document, err := json.Marshal(doc)
 		if err != nil {
 			span.RecordError(err)
-			return c.String(http.StatusInternalServerError, "Internal server error (delete error)")
+			return types.ApObject{}, errors.New("Internal server error (json marshal error)")
 		}
-		return c.String(http.StatusOK, "Deleted")
+
+		signature, err := core.SignBytes(document, s.config.ProxyPriv)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, errors.New("Internal server error (sign error)")
+		}
+
+		_, err = s.client.Commit(ctx, string(document), string(signature), nil)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, errors.New("Internal server error (delete error)")
+		}
+
+		err = s.store.DeleteApObjectReference(ctx, deleteRef.ApObjectID)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, errors.New("Internal server error (delete error)")
+		}
+		return types.ApObject{}, nil
 
 	default:
 		// print request body
 		b, err := json.Marshal(object)
 		if err != nil {
 			span.RecordError(err)
-			return c.String(http.StatusInternalServerError, "Internal server error (json marshal error)")
+			return types.ApObject{}, errors.New("Internal server error (json marshal error)")
 		}
 		log.Println("Unhandled Activitypub Object", string(b))
-		return c.String(http.StatusOK, "OK but not implemented")
+		return types.ApObject{}, nil
 	}
 
 }
-*/
 
 func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApObject, error) {
 	ctx, span := tracer.Start(ctx, "MessageToNote")
@@ -819,8 +873,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 	}
 }
 
-/*
-func (s Service) NoteToMessage(ctx context.Context, object Note, person Person, destStreams []string) (core.Message, error) {
+func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, person types.ApObject, destStreams []string) (core.Message, error) {
 
 	content := object.Content
 
@@ -830,11 +883,11 @@ func (s Service) NoteToMessage(ctx context.Context, object Note, person Person, 
 		}
 	}
 
-	var emojis map[string]WorldEmoji = make(map[string]WorldEmoji)
+	var emojis map[string]world.Emoji = make(map[string]world.Emoji)
 	for _, tag := range object.Tag {
 		if tag.Type == "Emoji" {
 			name := strings.Trim(tag.Name, ":")
-			emojis[name] = WorldEmoji{
+			emojis[name] = world.Emoji{
 				ImageURL: tag.Icon.URL,
 			}
 		}
@@ -866,44 +919,45 @@ func (s Service) NoteToMessage(ctx context.Context, object Note, person Person, 
 		date = time.Now()
 	}
 
-	b := message.SignedObject{
-		Signer: h.apconfig.ProxyCCID,
-		Type:   "Message",
-		Schema: "https://raw.githubusercontent.com/totegamma/concurrent-schemas/master/messages/note/0.0.1.json",
-		Body: map[string]interface{}{
-			"body": content,
-			"profileOverride": map[string]interface{}{
-				"username":    username,
-				"avatar":      person.Icon.URL,
-				"description": person.Summary,
-				"link":        person.URL,
+	doc := core.MessageDocument[world.MarkdownMessage]{
+		DocumentBase: core.DocumentBase[world.MarkdownMessage]{
+			Signer: s.config.ProxyCCID,
+			Type:   "message",
+			Schema: world.MarkdownMessageSchema,
+			Body: world.MarkdownMessage{
+				Body: content,
+				ProfileOverride: world.ProfileOverride{
+					Username:    username,
+					Avatar:      person.Icon.URL,
+					Description: person.Summary,
+					Link:        person.URL,
+				},
+				Emojis: emojis,
 			},
-			"emojis": emojis,
+			Meta: map[string]interface{}{
+				"apActor":          person.URL,
+				"apObjectRef":      object.ID,
+				"apPublisherInbox": person.Inbox,
+			},
+			SignedAt: date,
 		},
-		Meta: map[string]interface{}{
-			"apActor":          person.URL,
-			"apObjectRef":      object.ID,
-			"apPublisherInbox": person.Inbox,
-		},
-		SignedAt: date,
 	}
 
-	objb, err := json.Marshal(b)
+	document, err := json.Marshal(doc)
+	if err != nil {
+		return core.Message{}, errors.Wrap(err, "json marshal error")
+	}
+
+	signature, err := core.SignBytes(document, s.config.ProxyPriv)
+	if err != nil {
+		return core.Message{}, errors.Wrap(err, "sign error")
+	}
+
+	var created core.ResponseBase[core.Message]
+	_, err = s.client.Commit(ctx, string(document), string(signature), &created)
 	if err != nil {
 		return core.Message{}, err
 	}
 
-	objstr := string(objb)
-	objsig, err := util.SignBytes(objb, h.apconfig.Proxy.PrivateKey)
-	if err != nil {
-		return core.Message{}, err
-	}
-
-	created, err := h.message.PostMessage(ctx, objstr, objsig, destStreams)
-	if err != nil {
-		return core.Message{}, err
-	}
-
-	return created, nil
+	return created.Content, nil
 }
-*/

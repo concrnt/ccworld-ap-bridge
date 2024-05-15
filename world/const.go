@@ -13,3 +13,8 @@ const (
 
 	ProfileSchema = "https://schema.concrnt.world/p/main.json"
 )
+
+const (
+	UserHomeStream = "world.concrnt.t-home"
+	UserApStream   = "world.concrnt.t-ap"
+)

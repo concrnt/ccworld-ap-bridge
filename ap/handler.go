@@ -7,6 +7,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"go.opentelemetry.io/otel"
+
+	"github.com/concrnt/ccworld-ap-bridge/types"
 )
 
 var tracer = otel.Tracer("activitypub")
@@ -134,7 +136,6 @@ func (h Handler) Note(c echo.Context) error {
 	return c.JSON(http.StatusOK, result)
 }
 
-/*
 func (h Handler) Inbox(c echo.Context) error {
 	ctx, span := tracer.Start(c.Request().Context(), "HandlerAPInbox")
 	defer span.End()
@@ -146,15 +147,14 @@ func (h Handler) Inbox(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid request body")
 	}
 
-    id := c.Param("id")
+	id := c.Param("id")
 
-    result, err := h.service.Inbox(ctx, object, id)
-    if err != nil {
-        span.RecordError(err)
-        return c.String(http.StatusInternalServerError, "Internal server error: "+err.Error())
-    }
+	result, err := h.service.Inbox(ctx, object, id)
+	if err != nil {
+		span.RecordError(err)
+		return c.String(http.StatusInternalServerError, "Internal server error: "+err.Error())
+	}
 
-    c.Response().Header().Set("Content-Type", "application/activity+json")
-    return c.JSON(http.StatusOK, result)
+	c.Response().Header().Set("Content-Type", "application/activity+json")
+	return c.JSON(http.StatusOK, result)
 }
-*/

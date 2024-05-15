@@ -86,6 +86,7 @@ type ApObject struct {
 	Image             Icon            `json:"image,omitempty"`
 	PublicKey         Key             `json:"publicKey,omitempty"`
 	Object            any             `json:"object,omitempty"`
+	Sensitive         bool            `json:"sensitive,omitempty"`
 }
 
 type PersonEndpoints struct {
