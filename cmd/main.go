@@ -32,6 +32,7 @@ import (
 	apmiddleware "github.com/concrnt/ccworld-ap-bridge/middleware"
 	"github.com/concrnt/ccworld-ap-bridge/store"
 	"github.com/concrnt/ccworld-ap-bridge/types"
+	"github.com/concrnt/ccworld-ap-bridge/worker"
 )
 
 var (
@@ -145,6 +146,9 @@ func main() {
 	apiHandler := api.NewHandler(apiService)
 
 	apHandler := ap.NewHandler(apService)
+
+	worker := worker.NewWorker(rdb, storeService, client, apService, apclient, config.ApConfig)
+	go worker.Run()
 
 	e.GET("/.well-known/webfinger", apHandler.WebFinger)
 	e.GET("/.well-known/nodeinfo", apHandler.NodeInfoWellKnown)

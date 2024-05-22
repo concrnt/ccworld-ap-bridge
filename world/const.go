@@ -15,6 +15,7 @@ const (
 )
 
 const (
-	UserHomeStream = "world.concrnt.t-home"
-	UserApStream   = "world.concrnt.t-ap"
+	UserHomeStream   = "world.concrnt.t-home"
+	UserNotifyStream = "world.concrnt.t-notify"
+	UserApStream     = "world.concrnt.t-ap"
 )

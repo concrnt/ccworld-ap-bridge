@@ -45,6 +45,7 @@ type ReplyAssociation struct {
 type ReplyMessage struct {
 	ReplyToMessageID     string           `json:"replyToMessageId"`
 	ReplyToMessageAuthor string           `json:"replyToMessageAuthor"`
+	Body                 string           `json:"body"`
 	Emojis               map[string]Emoji `json:"emojis"`
 	ProfileOverride      ProfileOverride  `json:"profileOverride"`
 }

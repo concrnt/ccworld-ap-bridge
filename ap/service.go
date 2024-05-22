@@ -167,7 +167,7 @@ func (s *Service) User(ctx context.Context, id string) (types.ApObject, error) {
 		Inbox:       "https://" + s.config.FQDN + "/ap/acct/" + id + "/inbox",
 		Outbox:      "https://" + s.config.FQDN + "/ap/acct/" + id + "/outbox",
 		SharedInbox: "https://" + s.config.FQDN + "/ap/inbox",
-		Endpoints: types.PersonEndpoints{
+		Endpoints: &types.PersonEndpoints{
 			SharedInbox: "https://" + s.config.FQDN + "/ap/inbox",
 		},
 		PreferredUsername: id,
@@ -179,7 +179,7 @@ func (s *Service) User(ctx context.Context, id string) (types.ApObject, error) {
 			MediaType: "image/png",
 			URL:       profileDocument.Body.Avatar,
 		},
-		PublicKey: types.Key{
+		PublicKey: &types.Key{
 			ID:           "https://" + s.config.FQDN + "/ap/acct/" + id + "#main-key",
 			Type:         "Key",
 			Owner:        "https://" + s.config.FQDN + "/ap/acct/" + id,
