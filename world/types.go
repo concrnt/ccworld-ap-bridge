@@ -57,9 +57,9 @@ type RerouteAssociation struct {
 }
 
 type RerouteMessage struct {
-	RerouteToMessageID     string           `json:"rerouteToMessageId"`
-	RerouteToMessageAuthor string           `json:"rerouteToMessageAuthor"`
-	Body                   string           `json:"body"`
-	Emojis                 map[string]Emoji `json:"emojis"`
-	ProfileOverride        ProfileOverride  `json:"profileOverride"`
+	RerouteMessageID     string           `json:"rerouteMessageId"`
+	RerouteMessageAuthor string           `json:"rerouteMessageAuthor"`
+	Body                 string           `json:"body"`
+	Emojis               map[string]Emoji `json:"emojis"`
+	ProfileOverride      ProfileOverride  `json:"profileOverride"`
 }

@@ -820,7 +820,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 			return types.ApObject{}, errors.New("invalid payload")
 		}
 
-		replyAuthor, err := s.client.GetEntity(ctx, s.config.ProxyCCID, replyDocument.Body.ReplyToMessageAuthor)
+		replyAuthor, err := s.client.GetEntity(ctx, s.config.FQDN, replyDocument.Body.ReplyToMessageAuthor)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.New("entity not found")
@@ -866,13 +866,13 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 			return types.ApObject{}, errors.New("invalid payload")
 		}
 
-		rerouteAuthor, err := s.client.GetEntity(ctx, s.config.ProxyCCID, rerouteDocument.Body.RerouteToMessageAuthor)
+		rerouteAuthor, err := s.client.GetEntity(ctx, s.config.FQDN, rerouteDocument.Body.RerouteMessageAuthor)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.New("entity not found")
 		}
 
-		rerouteSource, err := s.client.GetMessage(ctx, rerouteAuthor.Domain, rerouteDocument.Body.RerouteToMessageID)
+		rerouteSource, err := s.client.GetMessage(ctx, rerouteAuthor.Domain, rerouteDocument.Body.RerouteMessageID)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.New("message not found")
@@ -891,7 +891,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 
 		ref, ok := rerouteMeta["apObjectRef"].(string)
 		if !ok {
-			ref = "https://" + rerouteAuthor.Domain + "/ap/note/" + rerouteDocument.Body.RerouteToMessageID
+			ref = "https://" + rerouteAuthor.Domain + "/ap/note/" + rerouteDocument.Body.RerouteMessageID
 		}
 
 		if text == "" {

@@ -31,21 +31,21 @@ func (w *Worker) StartAssociationWorker() {
 	for {
 		pubsubMsg, err := pubsub.ReceiveMessage(ctx)
 		if err != nil {
-			log.Printf("error: %v", err)
+			log.Printf("error while receiving message: %v", err)
 			continue
 		}
 
 		var streamEvent core.Event
 		err = json.Unmarshal([]byte(pubsubMsg.Payload), &streamEvent)
 		if err != nil {
-			log.Printf("error: %v", err)
+			log.Printf("error while unmarshalling stream event: %v", err)
 			continue
 		}
 
 		var document core.DocumentBase[any]
 		err = json.Unmarshal([]byte(streamEvent.Document), &document)
 		if err != nil {
-			log.Printf("error: %v", err)
+			log.Printf("error while unmarshalling document: %v", err)
 			continue
 		}
 
@@ -66,6 +66,7 @@ func (w *Worker) StartAssociationWorker() {
 		case "association":
 			{
 				if association.Target[0] != 'm' { // assert association target is message
+					log.Printf("target is not message: %v", association.Target)
 					continue
 				}
 
@@ -77,14 +78,14 @@ func (w *Worker) StartAssociationWorker() {
 
 				msg, err := w.client.GetMessage(ctx, w.config.FQDN, association.Target)
 				if err != nil {
-					log.Printf("error: %v", err)
+					log.Printf("error while getting message: %v", err)
 					continue
 				}
 
 				var messageDoc core.MessageDocument[world.MarkdownMessage]
 				err = json.Unmarshal([]byte(msg.Document), &messageDoc)
 				if err != nil {
-					log.Printf("error: %v", err)
+					log.Printf("error while unmarshal messageDoc: %v", err)
 					continue
 				}
 
@@ -113,7 +114,7 @@ func (w *Worker) StartAssociationWorker() {
 
 					err = w.apclient.PostToInbox(ctx, dest, like, assauthor)
 					if err != nil {
-						log.Printf("error: %v", err)
+						log.Printf("error while posting to inbox: %v", err)
 						continue
 					}
 					break
@@ -121,7 +122,7 @@ func (w *Worker) StartAssociationWorker() {
 					var reactionDoc core.AssociationDocument[world.ReactionAssociation]
 					err = json.Unmarshal([]byte(association.Document), &reactionDoc)
 					if err != nil {
-						log.Printf("error: %v", err)
+						log.Printf("error while unmarshalling reaction association: %v", err)
 						continue
 					}
 
@@ -151,27 +152,27 @@ func (w *Worker) StartAssociationWorker() {
 
 					err = w.apclient.PostToInbox(ctx, dest, like, assauthor)
 					if err != nil {
-						log.Printf("error: %v", err)
+						log.Printf("error while posting to inbox: %v", err)
 						continue
 					}
 				case world.ReplyAssociationSchema:
 					var replyDoc core.AssociationDocument[world.ReplyAssociation]
 					err = json.Unmarshal([]byte(association.Document), &replyDoc)
 					if err != nil {
-						log.Printf("error: %v", err)
+						log.Printf("error while unmarshalling reply association: %v", err)
 						continue
 					}
 
 					reply, err := w.client.GetMessage(ctx, w.config.FQDN, replyDoc.Body.MessageID) // TODO: handle remote
 					if err != nil {
-						log.Printf("error: %v", err)
+						log.Printf("error while getting reply message: %v", err)
 						continue
 					}
 
 					var replyMessage core.MessageDocument[world.ReplyMessage]
 					err = json.Unmarshal([]byte(reply.Document), &replyMessage)
 					if err != nil {
-						log.Printf("error: %v", err)
+						log.Printf("error while unmarshalling reply message: %v", err)
 						continue
 					}
 
@@ -179,7 +180,7 @@ func (w *Worker) StartAssociationWorker() {
 						Context: []string{"https://www.w3.org/ns/activitystreams"},
 						Type:    "Create",
 						ID:      "https://" + w.config.FQDN + "/ap/note/" + replyDoc.Body.MessageID + "/activity",
-						Actor:   "https://" + w.config.FQDN + "/ap/acct/" + replyDoc.Body.MessageAuthor,
+						Actor:   "https://" + w.config.FQDN + "/ap/acct/" + assauthor.ID,
 						Object: types.ApObject{
 							Type:         "Note",
 							ID:           "https://" + w.config.FQDN + "/ap/note/" + replyDoc.Body.MessageID,
@@ -192,7 +193,7 @@ func (w *Worker) StartAssociationWorker() {
 
 					err = w.apclient.PostToInbox(ctx, dest, create, assauthor)
 					if err != nil {
-						log.Printf("error: %v", err)
+						log.Printf("error while posting to inbox: %v", err)
 						continue
 					}
 
@@ -200,7 +201,7 @@ func (w *Worker) StartAssociationWorker() {
 					var rerouteDoc core.AssociationDocument[world.RerouteAssociation]
 					err = json.Unmarshal([]byte(association.Document), &rerouteDoc)
 					if err != nil {
-						log.Printf("error: %v", err)
+						log.Printf("error while unmarshalling reroute association: %v", err)
 						continue
 					}
 
@@ -211,10 +212,11 @@ func (w *Worker) StartAssociationWorker() {
 						Actor:   "https://" + w.config.FQDN + "/ap/acct/" + assauthor.ID,
 						Content: "",
 						Object:  ref,
+						To:      []string{"https://www.w3.org/ns/activitystreams#Public"},
 					}
 					err = w.apclient.PostToInbox(ctx, dest, announce, assauthor)
 					if err != nil {
-						log.Printf("error: %v", err)
+						log.Printf("error while posting to inbox: %v", err)
 						continue
 					}
 				}
