@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"log"
 
+	"github.com/pkg/errors"
+
 	"github.com/totegamma/concurrent/core"
 
 	"github.com/concrnt/ccworld-ap-bridge/types"
@@ -33,7 +35,7 @@ func (w *Worker) StartAssociationWorker() {
 			continue
 		}
 
-		log.Printf("received association: %v", pubsubMsg.Payload)
+		log.Printf("received message: %v", pubsubMsg.Payload)
 
 		var streamEvent core.Event
 		err = json.Unmarshal([]byte(pubsubMsg.Payload), &streamEvent)
@@ -42,164 +44,248 @@ func (w *Worker) StartAssociationWorker() {
 			continue
 		}
 
-		associationID := streamEvent.Item.ResourceID
-
-		association, err := w.client.GetAssociation(ctx, w.config.FQDN, associationID)
-		if err != nil {
-			log.Printf("error: %v", err)
-		}
-
-		if association.Target[0] != 'm' { // assert association target is message
-			continue
-		}
-
-		assauthor, err := w.store.GetEntityByCCID(ctx, association.Author) // TODO: handle remote
-		if err != nil {
-			log.Printf("get ass author entity failed: %v", err)
-			continue
-		}
-
-		msg, err := w.client.GetMessage(ctx, w.config.FQDN, association.Target)
+		var document core.DocumentBase[any]
+		err = json.Unmarshal([]byte(streamEvent.Document), &document)
 		if err != nil {
 			log.Printf("error: %v", err)
 			continue
 		}
 
-		var messageDoc core.MessageDocument[world.MarkdownMessage]
-		err = json.Unmarshal([]byte(msg.Document), &messageDoc)
+		// FIXME: fix this marshall -> unmarshall
+		str, err := json.Marshal(streamEvent.Resource)
 		if err != nil {
-			log.Printf("error: %v", err)
+			log.Printf(errors.Wrap(err, "failed to marshal resource").Error())
+			continue
+		}
+		var association core.Association
+		err = json.Unmarshal(str, &association)
+		if err != nil {
+			log.Printf(errors.Wrap(err, "failed to unmarshal association").Error())
 			continue
 		}
 
-		msgMeta, ok := messageDoc.Meta.(map[string]interface{})
-		ref, ok := msgMeta["apObjectRef"].(string)
-		if !ok {
-			log.Printf("target Message is not activitypub message")
-			continue
-		}
-		dest, ok := msgMeta["apPublisherInbox"].(string)
-		if !ok {
-			log.Printf("target Message is not activitypub message")
-			continue
-		}
+		switch document.Type {
+		case "association":
+			{
+				if association.Target[0] != 'm' { // assert association target is message
+					continue
+				}
 
-		switch association.Schema {
-		case world.LikeAssociationSchema:
-			like := types.ApObject{
-				Context: []string{"https://www.w3.org/ns/activitystreams"},
-				Type:    "Like",
-				ID:      "https://" + w.config.FQDN + "/ap/likes/" + association.ID,
-				Actor:   "https://" + w.config.FQDN + "/ap/acct/" + assauthor.ID,
-				Content: "⭐",
-				Object:  ref,
+				assauthor, err := w.store.GetEntityByCCID(ctx, association.Author) // TODO: handle remote
+				if err != nil {
+					log.Printf("get ass author entity failed: %v", err)
+					continue
+				}
+
+				msg, err := w.client.GetMessage(ctx, w.config.FQDN, association.Target)
+				if err != nil {
+					log.Printf("error: %v", err)
+					continue
+				}
+
+				var messageDoc core.MessageDocument[world.MarkdownMessage]
+				err = json.Unmarshal([]byte(msg.Document), &messageDoc)
+				if err != nil {
+					log.Printf("error: %v", err)
+					continue
+				}
+
+				msgMeta, ok := messageDoc.Meta.(map[string]interface{})
+				ref, ok := msgMeta["apObjectRef"].(string)
+				if !ok {
+					log.Printf("target Message is not activitypub message")
+					continue
+				}
+				dest, ok := msgMeta["apPublisherInbox"].(string)
+				if !ok {
+					log.Printf("target Message is not activitypub message")
+					continue
+				}
+
+				switch association.Schema {
+				case world.LikeAssociationSchema:
+					like := types.ApObject{
+						Context: []string{"https://www.w3.org/ns/activitystreams"},
+						Type:    "Like",
+						ID:      "https://" + w.config.FQDN + "/ap/likes/" + association.ID,
+						Actor:   "https://" + w.config.FQDN + "/ap/acct/" + assauthor.ID,
+						Content: "⭐",
+						Object:  ref,
+					}
+
+					err = w.apclient.PostToInbox(ctx, dest, like, assauthor)
+					if err != nil {
+						log.Printf("error: %v", err)
+						continue
+					}
+					break
+				case world.ReactionAssociationSchema:
+					var reactionDoc core.AssociationDocument[world.ReactionAssociation]
+					err = json.Unmarshal([]byte(association.Document), &reactionDoc)
+					if err != nil {
+						log.Printf("error: %v", err)
+						continue
+					}
+
+					shortcode := ":" + reactionDoc.Body.Shortcode + ":"
+					tag := []types.Tag{
+						{
+							Type: "Emoji",
+							ID:   reactionDoc.Body.ImageURL,
+							Name: ":" + reactionDoc.Body.Shortcode + ":",
+							Icon: types.Icon{
+								Type:      "Image",
+								MediaType: "image/png",
+								URL:       reactionDoc.Body.ImageURL,
+							},
+						},
+					}
+
+					like := types.ApObject{
+						Context: []string{"https://www.w3.org/ns/activitystreams"},
+						Type:    "Like",
+						ID:      "https://" + w.config.FQDN + "/ap/likes/" + association.ID,
+						Actor:   "https://" + w.config.FQDN + "/ap/acct/" + assauthor.ID,
+						Content: shortcode,
+						Tag:     tag,
+						Object:  ref,
+					}
+
+					err = w.apclient.PostToInbox(ctx, dest, like, assauthor)
+					if err != nil {
+						log.Printf("error: %v", err)
+						continue
+					}
+				case world.ReplyAssociationSchema:
+					var replyDoc core.AssociationDocument[world.ReplyAssociation]
+					err = json.Unmarshal([]byte(association.Document), &replyDoc)
+					if err != nil {
+						log.Printf("error: %v", err)
+						continue
+					}
+
+					reply, err := w.client.GetMessage(ctx, w.config.FQDN, replyDoc.Body.MessageID) // TODO: handle remote
+					if err != nil {
+						log.Printf("error: %v", err)
+						continue
+					}
+
+					var replyMessage core.MessageDocument[world.ReplyMessage]
+					err = json.Unmarshal([]byte(reply.Document), &replyMessage)
+					if err != nil {
+						log.Printf("error: %v", err)
+						continue
+					}
+
+					create := types.ApObject{
+						Context: []string{"https://www.w3.org/ns/activitystreams"},
+						Type:    "Create",
+						ID:      "https://" + w.config.FQDN + "/ap/note/" + replyDoc.Body.MessageID + "/activity",
+						Actor:   "https://" + w.config.FQDN + "/ap/acct/" + replyDoc.Body.MessageAuthor,
+						Object: types.ApObject{
+							Type:         "Note",
+							ID:           "https://" + w.config.FQDN + "/ap/note/" + replyDoc.Body.MessageID,
+							AttributedTo: "https://" + w.config.FQDN + "/ap/acct/" + assauthor.ID,
+							Content:      replyMessage.Body.Body,
+							InReplyTo:    ref,
+							To:           []string{"https://www.w3.org/ns/activitystreams#Public"},
+						},
+					}
+
+					err = w.apclient.PostToInbox(ctx, dest, create, assauthor)
+					if err != nil {
+						log.Printf("error: %v", err)
+						continue
+					}
+
+				case world.RerouteAssociationSchema:
+					var rerouteDoc core.AssociationDocument[world.RerouteAssociation]
+					err = json.Unmarshal([]byte(association.Document), &rerouteDoc)
+					if err != nil {
+						log.Printf("error: %v", err)
+						continue
+					}
+
+					announce := types.ApObject{
+						Context: []string{"https://www.w3.org/ns/activitystreams"},
+						Type:    "Announce",
+						ID:      "https://" + w.config.FQDN + "/ap/note/" + rerouteDoc.Body.MessageID,
+						Actor:   "https://" + w.config.FQDN + "/ap/acct/" + assauthor.ID,
+						Content: "",
+						Object:  ref,
+					}
+					err = w.apclient.PostToInbox(ctx, dest, announce, assauthor)
+					if err != nil {
+						log.Printf("error: %v", err)
+						continue
+					}
+				}
+
 			}
 
-			err = w.apclient.PostToInbox(ctx, dest, like, assauthor)
-			if err != nil {
-				log.Printf("error: %v", err)
-				continue
-			}
-			break
-		case world.ReactionAssociationSchema:
-			var reactionDoc core.AssociationDocument[world.ReactionAssociation]
-			err = json.Unmarshal([]byte(association.Document), &reactionDoc)
-			if err != nil {
-				log.Printf("error: %v", err)
-				continue
-			}
+		case "delete":
+			{
+				entity, err := w.store.GetEntityByCCID(ctx, association.Author)
+				if err != nil {
+					log.Printf("get entity by ccid failed: %v", err)
+					continue
+				}
 
-			shortcode := ":" + reactionDoc.Body.Shortcode + ":"
-			tag := []types.Tag{
-				{
-					Type: "Emoji",
-					ID:   reactionDoc.Body.ImageURL,
-					Name: ":" + reactionDoc.Body.Shortcode + ":",
-					Icon: types.Icon{
-						Type:      "Image",
-						MediaType: "image/png",
-						URL:       reactionDoc.Body.ImageURL,
+				target, err := w.client.GetMessage(ctx, w.config.FQDN, association.Target)
+				if err != nil {
+					log.Printf("error: %v", err)
+					continue
+				}
+
+				var messageDoc core.MessageDocument[world.MarkdownMessage]
+				err = json.Unmarshal([]byte(target.Document), &messageDoc)
+				if err != nil {
+					log.Printf("error: %v", err)
+					continue
+				}
+
+				messageMeta, ok := messageDoc.Meta.(map[string]any)
+				if !ok {
+					log.Printf("target Message is not activitypub message")
+					continue
+				}
+
+				ref, ok := messageMeta["apObjectRef"].(string)
+				if !ok {
+					log.Printf("target Message is not activitypub message")
+					continue
+				}
+
+				inbox, ok := messageMeta["apPublisherInbox"].(string)
+				if !ok {
+					log.Printf("target Message is not activitypub message")
+					continue
+				}
+
+				undo := types.ApObject{
+					Context: "https://www.w3.org/ns/activitystreams",
+					Type:    "Undo",
+					Actor:   "https://" + w.config.FQDN + "/ap/acct/" + entity.ID,
+					ID:      "https://" + w.config.FQDN + "/ap/likes/" + association.Target + "/undo",
+					Object: types.ApObject{
+						Context: "https://www.w3.org/ns/activitystreams",
+						Type:    "Like",
+						ID:      "https://" + w.config.FQDN + "/ap/likes/" + association.Target,
+						Actor:   "https://" + w.config.FQDN + "/ap/acct/" + entity.ID,
+						Object:  ref,
 					},
-				},
-			}
+				}
 
-			like := types.ApObject{
-				Context: []string{"https://www.w3.org/ns/activitystreams"},
-				Type:    "Like",
-				ID:      "https://" + w.config.FQDN + "/ap/likes/" + association.ID,
-				Actor:   "https://" + w.config.FQDN + "/ap/acct/" + assauthor.ID,
-				Content: shortcode,
-				Tag:     tag,
-				Object:  ref,
-			}
+				err = w.apclient.PostToInbox(ctx, inbox, undo, entity)
+				if err != nil {
+					log.Printf("error: %v", err)
+					continue
+				}
 
-			err = w.apclient.PostToInbox(ctx, dest, like, assauthor)
-			if err != nil {
-				log.Printf("error: %v", err)
-				continue
 			}
-		case world.ReplyAssociationSchema:
-			var replyDoc core.AssociationDocument[world.ReplyAssociation]
-			err = json.Unmarshal([]byte(association.Document), &replyDoc)
-			if err != nil {
-				log.Printf("error: %v", err)
-				continue
-			}
-
-			reply, err := w.client.GetMessage(ctx, w.config.FQDN, replyDoc.Body.MessageID) // TODO: handle remote
-			if err != nil {
-				log.Printf("error: %v", err)
-				continue
-			}
-
-			var replyMessage core.MessageDocument[world.ReplyMessage]
-			err = json.Unmarshal([]byte(reply.Document), &replyMessage)
-			if err != nil {
-				log.Printf("error: %v", err)
-				continue
-			}
-
-			create := types.ApObject{
-				Context: []string{"https://www.w3.org/ns/activitystreams"},
-				Type:    "Create",
-				ID:      "https://" + w.config.FQDN + "/ap/note/" + replyDoc.Body.MessageID + "/activity",
-				Actor:   "https://" + w.config.FQDN + "/ap/acct/" + replyDoc.Body.MessageAuthor,
-				Object: types.ApObject{
-					Type:         "Note",
-					ID:           "https://" + w.config.FQDN + "/ap/note/" + replyDoc.Body.MessageID,
-					AttributedTo: "https://" + w.config.FQDN + "/ap/acct/" + assauthor.ID,
-					Content:      replyMessage.Body.Body,
-					InReplyTo:    ref,
-					To:           []string{"https://www.w3.org/ns/activitystreams#Public"},
-				},
-			}
-
-			err = w.apclient.PostToInbox(ctx, dest, create, assauthor)
-			if err != nil {
-				log.Printf("error: %v", err)
-				continue
-			}
-
-		case world.RerouteAssociationSchema:
-			var rerouteDoc core.AssociationDocument[world.RerouteAssociation]
-			err = json.Unmarshal([]byte(association.Document), &rerouteDoc)
-			if err != nil {
-				log.Printf("error: %v", err)
-				continue
-			}
-
-			announce := types.ApObject{
-				Context: []string{"https://www.w3.org/ns/activitystreams"},
-				Type:    "Announce",
-				ID:      "https://" + w.config.FQDN + "/ap/note/" + rerouteDoc.Body.MessageID,
-				Actor:   "https://" + w.config.FQDN + "/ap/acct/" + assauthor.ID,
-				Content: "",
-				Object:  ref,
-			}
-			err = w.apclient.PostToInbox(ctx, dest, announce, assauthor)
-			if err != nil {
-				log.Printf("error: %v", err)
-				continue
+		default:
+			{
+				log.Printf("unknown document type: %v", document.Type)
 			}
 		}
 	}
