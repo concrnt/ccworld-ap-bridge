@@ -106,6 +106,9 @@ func (s *Service) WebFinger(ctx context.Context, resource string) (types.WebFing
 func (s *Service) NodeInfo(ctx context.Context) (types.NodeInfo, error) {
 	_, span := tracer.Start(ctx, "Ap.Service.NodeInfo")
 	defer span.End()
+
+	s.info.Metadata.ProxyCCID = s.config.ProxyCCID
+
 	return s.info, nil
 }
 

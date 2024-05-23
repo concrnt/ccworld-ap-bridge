@@ -48,6 +48,7 @@ type NodeInfoMetadata struct {
 	NodeDescription string                     `json:"nodeDescription,omitempty" yaml:"nodeDescription"`
 	Maintainer      NodeInfoMetadataMaintainer `json:"maintainer,omitempty" yaml:"maintainer"`
 	ThemeColor      string                     `json:"themeColor,omitempty" yaml:"themeColor"`
+	ProxyCCID       string                     `json:"proxyCCID,omitempty" yaml:"proxyCCID"`
 }
 
 // NodeInfoMetadataMaintainer is a struct for the maintainer field of a NodeInfo response.
