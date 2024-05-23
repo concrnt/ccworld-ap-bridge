@@ -35,8 +35,6 @@ func (w *Worker) StartAssociationWorker() {
 			continue
 		}
 
-		log.Printf("received message: %v", pubsubMsg.Payload)
-
 		var streamEvent core.Event
 		err = json.Unmarshal([]byte(pubsubMsg.Payload), &streamEvent)
 		if err != nil {

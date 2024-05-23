@@ -72,8 +72,6 @@ func (w *Worker) StartMessageWorker() {
 								continue
 							}
 
-							log.Printf("[worker %v] message received!\n", job.ID)
-
 							var streamEvent core.Event
 							err = json.Unmarshal([]byte(pubsubMsg.Payload), &streamEvent)
 							if err != nil {
@@ -81,57 +79,115 @@ func (w *Worker) StartMessageWorker() {
 								continue
 							}
 
-							messageID := streamEvent.Item.ResourceID
-							messageAuthor := streamEvent.Item.Owner
-							if streamEvent.Item.Author != nil {
-								messageAuthor = *streamEvent.Item.Author
-							}
-
-							if messageAuthor != ownerID {
-								log.Printf("message author is not owner: %v", messageAuthor)
-								continue
-							}
-
-							note, err := w.apservice.MessageToNote(ctx, messageID)
+							var document core.DocumentBase[any]
+							err = json.Unmarshal([]byte(streamEvent.Document), &document)
 							if err != nil {
 								log.Printf("error: %v", err)
 								continue
 							}
 
-							if note.Type == "Announce" {
-								announce := types.ApObject{
-									Context: []string{"https://www.w3.org/ns/activitystreams"},
-									Type:    "Announce",
-									ID:      "https://" + w.config.FQDN + "/ap/note/" + messageID + "/activity",
-									Actor:   "https://" + w.config.FQDN + "/ap/acct/" + job.PublisherUserID,
-									Content: "",
-									Object:  note.Object,
-									To:      []string{"https://www.w3.org/ns/activitystreams#Public"},
-								}
+							/*
+							   str, err := json.Marshal(streamEvent.Resource)
+							   if err != nil {
+							       log.Printf(errors.Wrap(err, "failed to marshal resource").Error())
+							       continue
+							   }
+							   var message core.Message
+							   err = json.Unmarshal(str, &message)
+							   if err != nil {
+							       log.Printf("error: %v", err)
+							       continue
+							   }
+							*/
 
-								err = w.apclient.PostToInbox(ctx, job.SubscriberInbox, announce, entity)
-								if err != nil {
-									log.Printf("error: %v", err)
+							switch document.Type {
+							case "message":
+								{
+									messageID := streamEvent.Item.ResourceID
+									messageAuthor := streamEvent.Item.Owner
+									if streamEvent.Item.Author != nil {
+										messageAuthor = *streamEvent.Item.Author
+									}
+
+									if messageAuthor != ownerID {
+										log.Printf("message author is not owner: %v", messageAuthor)
+										continue
+									}
+
+									note, err := w.apservice.MessageToNote(ctx, messageID)
+									if err != nil {
+										log.Printf("error: %v", err)
+										continue
+									}
+
+									if note.Type == "Announce" {
+										announce := types.ApObject{
+											Context: []string{"https://www.w3.org/ns/activitystreams"},
+											Type:    "Announce",
+											ID:      "https://" + w.config.FQDN + "/ap/note/" + messageID + "/activity",
+											Actor:   "https://" + w.config.FQDN + "/ap/acct/" + job.PublisherUserID,
+											Content: "",
+											Object:  note.Object,
+											To:      []string{"https://www.w3.org/ns/activitystreams#Public"},
+										}
+
+										err = w.apclient.PostToInbox(ctx, job.SubscriberInbox, announce, entity)
+										if err != nil {
+											log.Printf("error: %v", err)
+											continue
+										}
+										log.Printf("[worker %v] created", job.ID)
+									} else {
+
+										create := types.ApObject{
+											Context: []string{"https://www.w3.org/ns/activitystreams"},
+											Type:    "Create",
+											ID:      "https://" + w.config.FQDN + "/ap/note/" + messageID + "/activity",
+											Actor:   "https://" + w.config.FQDN + "/ap/acct/" + job.PublisherUserID,
+											To:      []string{"https://www.w3.org/ns/activitystreams#Public"},
+											Object:  note,
+										}
+
+										err = w.apclient.PostToInbox(ctx, job.SubscriberInbox, create, entity)
+										if err != nil {
+											log.Printf("error: %v", err)
+											continue
+										}
+										log.Printf("[worker %v] created", job.ID)
+									}
+								}
+							case "delete":
+								{
+
+									var deleteDoc core.DeleteDocument
+									err = json.Unmarshal([]byte(streamEvent.Document), &deleteDoc)
+									if err != nil {
+										log.Printf("error: %v", err)
+										continue
+									}
+
+									deleteObj := types.ApObject{
+										Context: "https://www.w3.org/ns/activitystreams",
+										Type:    "Delete",
+										ID:      "https://" + w.config.FQDN + "/ap/note/" + deleteDoc.Target + "/delete",
+										Actor:   "https://" + w.config.FQDN + "/ap/acct/" + job.PublisherUserID,
+										Object: types.ApObject{
+											Type: "Tombstone",
+											ID:   "https://" + w.config.FQDN + "/ap/note/" + deleteDoc.Target,
+										},
+									}
+
+									err = w.apclient.PostToInbox(ctx, job.SubscriberInbox, deleteObj, entity)
+									if err != nil {
+										log.Printf("error: %v", err)
+										continue
+									}
+								}
+							default:
+								{
+									log.Printf("unknown document type: %v", document.Type)
 									continue
 								}
-								log.Printf("[worker %v] created", job.ID)
-							} else {
-
-								create := types.ApObject{
-									Context: []string{"https://www.w3.org/ns/activitystreams"},
-									Type:    "Create",
-									ID:      "https://" + w.config.FQDN + "/ap/note/" + messageID + "/activity",
-									Actor:   "https://" + w.config.FQDN + "/ap/acct/" + job.PublisherUserID,
-									To:      []string{"https://www.w3.org/ns/activitystreams#Public"},
-									Object:  note,
-								}
-
-								err = w.apclient.PostToInbox(ctx, job.SubscriberInbox, create, entity)
-								if err != nil {
-									log.Printf("error: %v", err)
-									continue
-								}
-								log.Printf("[worker %v] created", job.ID)
 							}
 						}
 					}
