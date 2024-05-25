@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/concrnt/ccworld-ap-bridge/types"
 	"github.com/totegamma/concurrent/core"
 )
 
@@ -40,28 +39,6 @@ func (h Handler) GetPerson(c echo.Context) error {
 
 	c.Response().Header().Set("Content-Type", "application/activity+json")
 	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": person})
-}
-
-// UpdatePerson handles entity updates.
-func (h Handler) UpdatePerson(c echo.Context) error {
-	ctx, span := tracer.Start(c.Request().Context(), "UpdatePerson")
-	defer span.End()
-
-	requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
-	if !ok {
-		return c.JSON(http.StatusForbidden, echo.Map{"status": "error", "message": "requester not found"})
-	}
-
-	var person types.ApPerson
-	err := c.Bind(&person)
-	if err != nil {
-		span.RecordError(err)
-		return c.String(http.StatusBadRequest, "Invalid request body")
-	}
-
-	created, err := h.service.UpdatePerson(ctx, requester, person)
-
-	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": created})
 }
 
 // Follow handles entity follow requests.
@@ -145,6 +122,35 @@ func (h Handler) CreateEntity(c echo.Context) error {
 	}
 
 	entity, err := h.service.CreateEntity(ctx, requester, request.ID)
+
+	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": entity})
+}
+
+type UpdateEntityAliasesRequest struct {
+	Aliases []string `json:"aliases"`
+}
+
+func (h Handler) UpdateEntityAliases(c echo.Context) error {
+	ctx, span := tracer.Start(c.Request().Context(), "UpdateEntityAliases")
+	defer span.End()
+
+	requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
+	if !ok {
+		return c.JSON(http.StatusForbidden, echo.Map{"status": "error", "message": "requester not found"})
+	}
+
+	var request UpdateEntityAliasesRequest
+	err := c.Bind(&request)
+	if err != nil {
+		span.RecordError(err)
+		return c.String(http.StatusBadRequest, "Invalid request body")
+	}
+
+	entity, err := h.service.UpdateEntityAliases(ctx, requester, request.Aliases)
+	if err != nil {
+		span.RecordError(err)
+		return c.String(http.StatusNotFound, "entity not found")
+	}
 
 	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": entity})
 }

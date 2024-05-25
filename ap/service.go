@@ -188,6 +188,7 @@ func (s *Service) User(ctx context.Context, id string) (types.ApObject, error) {
 			Owner:        "https://" + s.config.FQDN + "/ap/acct/" + id,
 			PublicKeyPem: entity.Publickey,
 		},
+		AlsoKnownAs: entity.AlsoKnownAs,
 	}, nil
 }
 

@@ -88,6 +88,7 @@ type ApObject struct {
 	PublicKey         *Key             `json:"publicKey,omitempty"`
 	Object            any              `json:"object,omitempty"`
 	Sensitive         bool             `json:"sensitive,omitempty"`
+	AlsoKnownAs       []string         `json:"alsoKnownAs,omitempty"`
 }
 
 type PersonEndpoints struct {

@@ -7,11 +7,9 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
-	"errors"
 	"log"
 	"strings"
 
-	// "github.com/totegamma/concurrent/core"
 	"github.com/concrnt/ccworld-ap-bridge/apclient"
 	"github.com/concrnt/ccworld-ap-bridge/store"
 	"github.com/concrnt/ccworld-ap-bridge/types"
@@ -48,27 +46,17 @@ func (s *Service) GetPerson(ctx context.Context, id string) (types.ApPerson, err
 	return person, nil
 }
 
-func (s *Service) UpdatePerson(ctx context.Context, requester string, person types.ApPerson) (types.ApPerson, error) {
-	ctx, span := tracer.Start(ctx, "Api.Service.UpdatePerson")
+func (s *Service) UpdateEntityAliases(ctx context.Context, requester string, aliases []string) (types.ApEntity, error) {
+	ctx, span := tracer.Start(ctx, "Api.Service.UpdateEntityAliases")
 	defer span.End()
 
 	entity, err := s.store.GetEntityByCCID(ctx, requester)
 	if err != nil {
 		span.RecordError(err)
-		return types.ApPerson{}, err
+		return types.ApEntity{}, err
 	}
 
-	if entity.CCID != requester {
-		return types.ApPerson{}, errors.New("unauthorized")
-	}
-
-	created, err := s.store.UpsertPerson(ctx, person)
-	if err != nil {
-		span.RecordError(err)
-		return types.ApPerson{}, err
-	}
-
-	return created, nil
+	return s.store.UpdateEntityAliases(ctx, entity.ID, aliases)
 }
 
 func (s *Service) Follow(ctx context.Context, requester, targetID string) (types.ApFollow, error) {

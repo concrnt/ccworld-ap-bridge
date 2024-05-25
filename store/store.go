@@ -54,12 +54,18 @@ func (s Store) CreateEntity(ctx context.Context, entity types.ApEntity) (types.A
 	return entity, result.Error
 }
 
-// UpdateEntity updates an entity.
-func (s Store) UpdateEntity(ctx context.Context, entity types.ApEntity) (types.ApEntity, error) {
-	ctx, span := tracer.Start(ctx, "StoreUpdateEntity")
+func (s Store) UpdateEntityAliases(ctx context.Context, id string, aliases []string) (types.ApEntity, error) {
+	ctx, span := tracer.Start(ctx, "StoreUpdateEntityAliases")
 	defer span.End()
 
-	result := s.db.WithContext(ctx).Save(&entity)
+	var entity types.ApEntity
+	result := s.db.WithContext(ctx).Where("id = ?", id).First(&entity)
+	if result.Error != nil {
+		return entity, result.Error
+	}
+
+	entity.AlsoKnownAs = aliases
+	result = s.db.WithContext(ctx).Save(&entity)
 	return entity, result.Error
 }
 
