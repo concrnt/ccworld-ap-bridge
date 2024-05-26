@@ -162,11 +162,12 @@ func main() {
 	ap.POST("/inbox", apHandler.Inbox)
 
 	ap.GET("/api/entity/:ccid", apiHandler.GetEntityID)
-	ap.POST("/api/entity", apiHandler.CreateEntity, auth.Restrict(auth.ISLOCAL))      // ISLOCAL
-	ap.POST("/api/follow/:id", apiHandler.Follow, auth.Restrict(auth.ISLOCAL))        // ISLOCAL
-	ap.DELETE("/api/follow/:id", apiHandler.UnFollow, auth.Restrict(auth.ISLOCAL))    // ISLOCAL
-	ap.GET("/api/resolve/:id", apiHandler.ResolvePerson, auth.Restrict(auth.ISLOCAL)) // ISLOCAL
-	ap.GET("/api/stats", apiHandler.GetStats, auth.Restrict(auth.ISLOCAL))            // ISLOCAL
+	ap.POST("/api/entity", apiHandler.CreateEntity, auth.Restrict(auth.ISLOCAL))                  // ISLOCAL
+	ap.POST("/api/follow/:id", apiHandler.Follow, auth.Restrict(auth.ISLOCAL))                    // ISLOCAL
+	ap.DELETE("/api/follow/:id", apiHandler.UnFollow, auth.Restrict(auth.ISLOCAL))                // ISLOCAL
+	ap.GET("/api/resolve/:id", apiHandler.ResolvePerson, auth.Restrict(auth.ISLOCAL))             // ISLOCAL
+	ap.GET("/api/stats", apiHandler.GetStats, auth.Restrict(auth.ISLOCAL))                        // ISLOCAL
+	ap.POST("/api/entities/aliases", apiHandler.UpdateEntityAliases, auth.Restrict(auth.ISLOCAL)) // ISLOCAL
 
 	e.GET("/health", func(c echo.Context) (err error) {
 		ctx := c.Request().Context()
