@@ -300,6 +300,14 @@ func (s *Service) ResolvePerson(ctx context.Context, id, requester string) (type
 		return types.ApObject{}, err
 	}
 
+	if strings.Contains(id, "@") {
+		id, err = apclient.ResolveActor(ctx, id)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, err
+		}
+	}
+
 	person, err := s.apclient.FetchPerson(ctx, id, entity)
 	if err != nil {
 		span.RecordError(err)
