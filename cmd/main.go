@@ -48,7 +48,7 @@ func main() {
 	config := Config{}
 	ConfPath := os.Getenv("CCWORLD_AP_BRIDGE_CONFIG")
 	if ConfPath == "" {
-		ConfPath = "/etc/concurrent/activitypub.yaml"
+		ConfPath = "/etc/concrnt/config/apconfig.yaml"
 	}
 	config.Load(ConfPath)
 
