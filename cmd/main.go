@@ -187,7 +187,7 @@ func main() {
 
 	e.GET("/metrics", echoprometheus.NewHandler())
 
-	e.Logger.Fatal(e.Start(":8070"))
+	e.Logger.Fatal(e.Start(":8000"))
 }
 
 func setupTraceProvider(endpoint string, serviceName string, serviceVersion string) (func(), error) {
