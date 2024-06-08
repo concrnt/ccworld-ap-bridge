@@ -211,7 +211,7 @@ func (s *Service) GetNoteWebURL(ctx context.Context, id string) (string, error) 
 	ctx, span := tracer.Start(ctx, "Ap.Service.GetNoteWebURL")
 	defer span.End()
 
-	msg, err := s.client.GetMessage(ctx, s.config.ProxyCCID, id, nil)
+	msg, err := s.client.GetMessage(ctx, s.config.FQDN, id, nil)
 	if err != nil {
 		span.RecordError(err)
 		return "", err
