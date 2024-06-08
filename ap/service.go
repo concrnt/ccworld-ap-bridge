@@ -151,7 +151,7 @@ func (s *Service) GetUserWebURL(ctx context.Context, id string) (string, error) 
 		span.RecordError(err)
 		return "", err
 	}
-	return "https://concurrent.world/entity/" + entity.CCID, nil
+	return "https://concrnt.world/" + entity.CCID, nil
 
 }
 
@@ -217,7 +217,7 @@ func (s *Service) GetNoteWebURL(ctx context.Context, id string) (string, error) 
 		return "", err
 	}
 
-	return "https://concurrent.world/message/" + id + "@" + msg.Author, nil
+	return "https://concrnt.world/" + msg.Author + "/" + id, nil
 }
 
 func (s *Service) Note(ctx context.Context, id string) (types.ApObject, error) {
