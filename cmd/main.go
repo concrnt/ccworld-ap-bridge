@@ -187,7 +187,13 @@ func main() {
 
 	e.GET("/metrics", echoprometheus.NewHandler())
 
-	e.Logger.Fatal(e.Start(":8000"))
+	port := ":8000"
+	envport := os.Getenv("CC_AP_PORT")
+	if envport != "" {
+		port = ":" + envport
+	}
+
+	e.Logger.Fatal(e.Start(port))
 }
 
 func setupTraceProvider(endpoint string, serviceName string, serviceVersion string) (func(), error) {

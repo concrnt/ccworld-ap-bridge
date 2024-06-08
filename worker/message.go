@@ -43,7 +43,7 @@ func (w *Worker) StartMessageWorker() {
 				ownerID := entity.CCID
 				home := world.UserHomeStream + "@" + ownerID
 
-				timeline, err := w.client.GetTimeline(ctx, w.config.FQDN, home)
+				timeline, err := w.client.GetTimeline(ctx, w.config.FQDN, home, nil)
 				if err != nil {
 					log.Printf("error: %v", err)
 					continue

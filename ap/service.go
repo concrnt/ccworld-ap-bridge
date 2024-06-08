@@ -8,9 +8,11 @@ import (
 	"log"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
 	"github.com/concrnt/ccworld-ap-bridge/apclient"
@@ -19,6 +21,7 @@ import (
 	"github.com/concrnt/ccworld-ap-bridge/world"
 	"github.com/totegamma/concurrent/client"
 	"github.com/totegamma/concurrent/core"
+	"github.com/totegamma/concurrent/x/jwt"
 )
 
 type Service struct {
@@ -36,6 +39,18 @@ func printJson(v interface{}) {
 		return
 	}
 	fmt.Println(string(b))
+}
+
+func createToken(domain, ccid, priv string) (string, error) {
+	token, err := jwt.Create(jwt.Claims{
+		JWTID:          uuid.New().String(),
+		IssuedAt:       strconv.FormatInt(time.Now().Unix(), 10),
+		ExpirationTime: strconv.FormatInt(time.Now().Add(5*time.Minute).Unix(), 10),
+		Audience:       domain,
+		Issuer:         ccid,
+		Subject:        "concrnt",
+	}, priv)
+	return token, err
 }
 
 func NewService(
@@ -150,7 +165,7 @@ func (s *Service) User(ctx context.Context, id string) (types.ApObject, error) {
 		return types.ApObject{}, err
 	}
 
-	profile, err := s.client.GetProfile(ctx, s.config.FQDN, entity.CCID+"/world.concrnt.p")
+	profile, err := s.client.GetProfile(ctx, s.config.FQDN, entity.CCID+"/world.concrnt.p", nil)
 	if err != nil {
 		span.RecordError(err)
 		return types.ApObject{}, err
@@ -196,7 +211,7 @@ func (s *Service) GetNoteWebURL(ctx context.Context, id string) (string, error) 
 	ctx, span := tracer.Start(ctx, "Ap.Service.GetNoteWebURL")
 	defer span.End()
 
-	msg, err := s.client.GetMessage(ctx, s.config.ProxyCCID, id)
+	msg, err := s.client.GetMessage(ctx, s.config.ProxyCCID, id, nil)
 	if err != nil {
 		span.RecordError(err)
 		return "", err
@@ -285,7 +300,14 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 
 	case "Like":
 		targetID := strings.Replace(object.Object.(string), "https://"+s.config.FQDN+"/ap/note/", "", 1)
-		targetMsg, err := s.client.GetMessage(ctx, s.config.ProxyCCID, targetID)
+		token, err := createToken(s.config.FQDN, s.config.ProxyCCID, s.config.ProxyPriv)
+		if err != nil {
+			log.Printf("failed to generate token %v", err)
+			return types.ApObject{}, errors.New("Internal server error (generate token error)")
+		}
+		targetMsg, err := s.client.GetMessage(ctx, s.config.FQDN, targetID, &client.Options{
+			AuthToken: token,
+		})
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.New("message not found")
@@ -325,6 +347,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 			doc = core.AssociationDocument[world.ReactionAssociation]{
 				DocumentBase: core.DocumentBase[world.ReactionAssociation]{
 					Signer: s.config.ProxyCCID,
+					Owner:  targetMsg.Author,
 					Type:   "association",
 					Schema: world.LikeAssociationSchema,
 					Body: world.ReactionAssociation{
@@ -346,6 +369,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 			doc = core.AssociationDocument[world.ReactionAssociation]{
 				DocumentBase: core.DocumentBase[world.ReactionAssociation]{
 					Signer: s.config.ProxyCCID,
+					Owner:  targetMsg.Author,
 					Type:   "association",
 					Schema: world.ReactionAssociationSchema,
 					Body: world.ReactionAssociation{
@@ -394,7 +418,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 		}
 
 		var created core.ResponseBase[core.Association]
-		_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), &created)
+		_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), &created, nil)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.New("Internal server error (post association error)")
@@ -644,7 +668,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 				return types.ApObject{}, errors.New("Internal server error (json marshal error)")
 			}
 
-			_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), nil)
+			_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), nil, nil)
 			if err != nil {
 				span.RecordError(err)
 				return types.ApObject{}, errors.New("Internal server error (delete like error)")
@@ -714,7 +738,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 			return types.ApObject{}, errors.New("Internal server error (json marshal error)")
 		}
 
-		_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), nil)
+		_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), nil, nil)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.New("Internal server error (delete error)")
@@ -739,7 +763,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 	ctx, span := tracer.Start(ctx, "MessageToNote")
 	defer span.End()
 
-	message, err := s.client.GetMessage(ctx, s.config.FQDN, messageID)
+	message, err := s.client.GetMessage(ctx, s.config.FQDN, messageID, nil)
 	if err != nil {
 		span.RecordError(err)
 		return types.ApObject{}, errors.New("message not found")
@@ -821,13 +845,13 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 			return types.ApObject{}, errors.New("invalid payload")
 		}
 
-		replyAuthor, err := s.client.GetEntity(ctx, s.config.FQDN, replyDocument.Body.ReplyToMessageAuthor)
+		replyAuthor, err := s.client.GetEntity(ctx, s.config.FQDN, replyDocument.Body.ReplyToMessageAuthor, nil)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.New("entity not found")
 		}
 
-		replySource, err := s.client.GetMessage(ctx, replyAuthor.Domain, replyDocument.Body.ReplyToMessageID)
+		replySource, err := s.client.GetMessage(ctx, replyAuthor.Domain, replyDocument.Body.ReplyToMessageID, nil)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.New("message not found")
@@ -867,13 +891,13 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 			return types.ApObject{}, errors.New("invalid payload")
 		}
 
-		rerouteAuthor, err := s.client.GetEntity(ctx, s.config.FQDN, rerouteDocument.Body.RerouteMessageAuthor)
+		rerouteAuthor, err := s.client.GetEntity(ctx, s.config.FQDN, rerouteDocument.Body.RerouteMessageAuthor, nil)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.New("entity not found")
 		}
 
-		rerouteSource, err := s.client.GetMessage(ctx, rerouteAuthor.Domain, rerouteDocument.Body.RerouteMessageID)
+		rerouteSource, err := s.client.GetMessage(ctx, rerouteAuthor.Domain, rerouteDocument.Body.RerouteMessageID, nil)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.New("message not found")
@@ -1012,7 +1036,7 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 	}
 
 	var created core.ResponseBase[core.Message]
-	_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), &created)
+	_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), &created, nil)
 	if err != nil {
 		return core.Message{}, err
 	}

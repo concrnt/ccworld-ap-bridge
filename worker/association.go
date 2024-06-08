@@ -4,20 +4,37 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"strconv"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
+	"github.com/totegamma/concurrent/client"
 	"github.com/totegamma/concurrent/core"
+	"github.com/totegamma/concurrent/x/jwt"
 
 	"github.com/concrnt/ccworld-ap-bridge/types"
 	"github.com/concrnt/ccworld-ap-bridge/world"
 )
 
+func createToken(domain, ccid, priv string) (string, error) {
+	token, err := jwt.Create(jwt.Claims{
+		JWTID:          uuid.New().String(),
+		IssuedAt:       strconv.FormatInt(time.Now().Unix(), 10),
+		ExpirationTime: strconv.FormatInt(time.Now().Add(5*time.Minute).Unix(), 10),
+		Audience:       domain,
+		Issuer:         ccid,
+		Subject:        "concrnt",
+	}, priv)
+	return token, err
+}
+
 func (w *Worker) StartAssociationWorker() {
 
 	ctx := context.Background()
 	notificationStream := world.UserNotifyStream + "@" + w.config.ProxyCCID
-	timeline, err := w.client.GetTimeline(ctx, w.config.FQDN, notificationStream)
+	timeline, err := w.client.GetTimeline(ctx, w.config.FQDN, notificationStream, nil)
 	if err != nil {
 		log.Printf("error: %v", err)
 		return
@@ -76,7 +93,15 @@ func (w *Worker) StartAssociationWorker() {
 					continue
 				}
 
-				msg, err := w.client.GetMessage(ctx, w.config.FQDN, association.Target)
+				token, err := createToken(w.config.FQDN, w.config.ProxyCCID, w.config.ProxyPriv)
+				if err != nil {
+					log.Printf("failed to generate token %v", err)
+					continue
+				}
+
+				msg, err := w.client.GetMessage(ctx, w.config.FQDN, association.Target, &client.Options{
+					AuthToken: token,
+				})
 				if err != nil {
 					log.Printf("error while getting message: %v", err)
 					continue
@@ -163,7 +188,15 @@ func (w *Worker) StartAssociationWorker() {
 						continue
 					}
 
-					reply, err := w.client.GetMessage(ctx, w.config.FQDN, replyDoc.Body.MessageID) // TODO: handle remote
+					token, err := createToken(w.config.FQDN, w.config.ProxyCCID, w.config.ProxyPriv)
+					if err != nil {
+						log.Printf("failed to generate token %v", err)
+						continue
+					}
+
+					reply, err := w.client.GetMessage(ctx, w.config.FQDN, replyDoc.Body.MessageID, &client.Options{
+						AuthToken: token,
+					}) // TODO: handle remote
 					if err != nil {
 						log.Printf("error while getting reply message: %v", err)
 						continue
@@ -231,7 +264,15 @@ func (w *Worker) StartAssociationWorker() {
 					continue
 				}
 
-				target, err := w.client.GetMessage(ctx, w.config.FQDN, association.Target)
+				token, err := createToken(w.config.FQDN, w.config.ProxyCCID, w.config.ProxyPriv)
+				if err != nil {
+					log.Printf("failed to generate token %v", err)
+					continue
+				}
+
+				target, err := w.client.GetMessage(ctx, w.config.FQDN, association.Target, &client.Options{
+					AuthToken: token,
+				})
 				if err != nil {
 					log.Printf("error: %v", err)
 					continue

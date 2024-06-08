@@ -12,7 +12,7 @@ tmp_dir = "tmp"
   exclude_regex = ["_test.go"]
   exclude_unchanged = false
   follow_symlink = false
-  full_bin = "CCWORLD_AP_BRIDGE_CONFIG='./config.yaml' ./tmp/main"
+  full_bin = "CCWORLD_AP_BRIDGE_CONFIG='./config.yaml' CC_AP_PORT='8070' ./tmp/main"
   include_dir = []
   include_ext = ["go", "tpl", "tmpl", "html"]
   include_file = []
