@@ -54,7 +54,7 @@ jobs:
           context: .
           file: ./cmd/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
-          platforms: linux/amd64,linux/arm64/v8
+          platforms: linux/amd64,linux/arm64,linux/arm64/v8
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
