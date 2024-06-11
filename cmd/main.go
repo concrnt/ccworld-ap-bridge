@@ -29,6 +29,7 @@ import (
 	"github.com/concrnt/ccworld-ap-bridge/ap"
 	"github.com/concrnt/ccworld-ap-bridge/apclient"
 	"github.com/concrnt/ccworld-ap-bridge/api"
+	"github.com/concrnt/ccworld-ap-bridge/bridge"
 	apmiddleware "github.com/concrnt/ccworld-ap-bridge/middleware"
 	"github.com/concrnt/ccworld-ap-bridge/store"
 	"github.com/concrnt/ccworld-ap-bridge/types"
@@ -107,7 +108,6 @@ func main() {
 	log.Println("start migrate")
 	db.AutoMigrate(
 		&types.ApEntity{},
-		&types.ApPerson{},
 		&types.ApFollow{},
 		&types.ApFollower{},
 		&types.ApObjectReference{},
@@ -134,20 +134,24 @@ func main() {
 	storeService := store.NewStore(db)
 	client := client.NewClient()
 	apclient := apclient.NewApClient(mc, storeService, config.ApConfig)
+
+	bridge := bridge.NewService(storeService, client, apclient, config.ApConfig)
+
 	apService := ap.NewService(
 		storeService,
 		client,
 		apclient,
+		bridge,
 		config.NodeInfo,
 		config.ApConfig,
 	)
 
-	apiService := api.NewService(storeService, apclient, config.ApConfig)
+	apiService := api.NewService(storeService, client, apclient, bridge, config.ApConfig)
 	apiHandler := api.NewHandler(apiService)
 
 	apHandler := ap.NewHandler(apService)
 
-	worker := worker.NewWorker(rdb, storeService, client, apService, apclient, config.ApConfig)
+	worker := worker.NewWorker(rdb, storeService, client, apclient, bridge, config.ApConfig)
 	go worker.Run()
 
 	e.GET("/.well-known/webfinger", apHandler.WebFinger)
@@ -161,13 +165,15 @@ func main() {
 
 	ap.POST("/inbox", apHandler.Inbox)
 
-	ap.GET("/api/entity/:ccid", apiHandler.GetEntityID)
+	ap.GET("/api/entity", apiHandler.GetEntity, auth.Restrict(auth.ISLOCAL))                      // ISLOCAL
+	ap.GET("/api/entity/:ccid", apiHandler.GetEntity, auth.Restrict(auth.ISLOCAL))                // ISLOCAL
 	ap.POST("/api/entity", apiHandler.CreateEntity, auth.Restrict(auth.ISLOCAL))                  // ISLOCAL
 	ap.POST("/api/follow/:id", apiHandler.Follow, auth.Restrict(auth.ISLOCAL))                    // ISLOCAL
 	ap.DELETE("/api/follow/:id", apiHandler.UnFollow, auth.Restrict(auth.ISLOCAL))                // ISLOCAL
 	ap.GET("/api/resolve/:id", apiHandler.ResolvePerson, auth.Restrict(auth.ISLOCAL))             // ISLOCAL
 	ap.GET("/api/stats", apiHandler.GetStats, auth.Restrict(auth.ISLOCAL))                        // ISLOCAL
 	ap.POST("/api/entities/aliases", apiHandler.UpdateEntityAliases, auth.Restrict(auth.ISLOCAL)) // ISLOCAL
+	ap.GET("/api/import", apiHandler.ImportNote, auth.Restrict(auth.ISLOCAL))                     // ISLOCAL
 
 	e.GET("/health", func(c echo.Context) (err error) {
 		ctx := c.Request().Context()

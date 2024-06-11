@@ -13,14 +13,6 @@ type ApEntity struct {
 	AlsoKnownAs pq.StringArray `json:"aliases" gorm:"type:text[]"`
 }
 
-// ApPerson is a db model of an ActivityPub entity.
-type ApPerson struct {
-	ID      string `json:"id" gorm:"type:text"`
-	Name    string `json:"name" gorm:"type:text"`
-	Summary string `json:"summary" gorm:"type:text"`
-	IconURL string `json:"icon_url" gorm:"type:text"`
-}
-
 // ApFollow is a db model of an ActivityPub follow.
 // Concurrent -> Activitypub
 type ApFollow struct {

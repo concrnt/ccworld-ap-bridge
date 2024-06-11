@@ -114,7 +114,7 @@ func (w *Worker) StartMessageWorker() {
 										continue
 									}
 
-									note, err := w.apservice.MessageToNote(ctx, messageID)
+									note, err := w.bridge.MessageToNote(ctx, messageID)
 									if err != nil {
 										log.Printf("error while converting message to note: %v", err)
 										continue

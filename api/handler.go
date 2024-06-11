@@ -22,23 +22,38 @@ func NewHandler(service *Service) Handler {
 	}
 }
 
-func (h Handler) GetPerson(c echo.Context) error {
+func (h Handler) GetEntity(c echo.Context) error {
 	ctx, span := tracer.Start(c.Request().Context(), "GetPerson")
 	defer span.End()
 
-	id := c.Param("id")
-	if id == "" {
-		return c.String(http.StatusBadRequest, "Invalid username")
+	ccid := c.Param("ccid")
+	if ccid == "" {
+		ccid = c.QueryParam("ccid")
 	}
 
-	person, err := h.service.GetPerson(ctx, id)
-	if err != nil {
-		span.RecordError(err)
-		return c.String(http.StatusNotFound, "entity not found")
+	userid := c.QueryParam("id")
+
+	if ccid != "" {
+		person, err := h.service.GetEntityByCCID(ctx, ccid)
+		if err != nil {
+			span.RecordError(err)
+			return c.String(http.StatusNotFound, "entity not found")
+		}
+
+		return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": person})
 	}
 
-	c.Response().Header().Set("Content-Type", "application/activity+json")
-	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": person})
+	if userid != "" {
+		person, err := h.service.GetEntityByID(ctx, userid)
+		if err != nil {
+			span.RecordError(err)
+			return c.String(http.StatusNotFound, "entity not found")
+		}
+
+		return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": person})
+	}
+
+	return c.String(http.StatusBadRequest, "Invalid request")
 }
 
 // Follow handles entity follow requests.
@@ -155,25 +170,6 @@ func (h Handler) UpdateEntityAliases(c echo.Context) error {
 	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": entity})
 }
 
-// GetEntityID handles entity id requests.
-func (h Handler) GetEntityID(c echo.Context) error {
-	ctx, span := tracer.Start(c.Request().Context(), "GetEntityID")
-	defer span.End()
-
-	ccid := c.Param("ccid")
-	if ccid == "" {
-		return c.String(http.StatusBadRequest, "Invalid username")
-	}
-
-	entity, err := h.service.GetEntityID(ctx, ccid)
-	if err != nil {
-		span.RecordError(err)
-		return c.String(http.StatusNotFound, "entity not found")
-	}
-
-	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": entity})
-}
-
 func (h Handler) GetStats(c echo.Context) error {
 	ctx, span := tracer.Start(c.Request().Context(), "Api.Service.GetStats")
 	defer span.End()
@@ -215,4 +211,28 @@ func (h Handler) ResolvePerson(c echo.Context) error {
 
 	c.Response().Header().Set("Content-Type", "application/activity+json")
 	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": person})
+}
+
+func (h Handler) ImportNote(c echo.Context) error {
+	ctx, span := tracer.Start(c.Request().Context(), "Api.Service.ImportNote")
+	defer span.End()
+
+	requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
+	if !ok {
+		return c.JSON(http.StatusForbidden, echo.Map{"status": "error", "message": "requester not found"})
+	}
+
+	noteID := c.QueryParams().Get("note")
+	if noteID == "" {
+		log.Println("invalid noteID: ", noteID)
+		return c.String(http.StatusBadRequest, "Invalid noteID")
+	}
+
+	message, err := h.service.ImportNote(ctx, noteID, requester)
+	if err != nil {
+		span.RecordError(err)
+		return c.String(http.StatusNotFound, "note not found")
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": message})
 }

@@ -69,25 +69,6 @@ func (s Store) UpdateEntityAliases(ctx context.Context, id string, aliases []str
 	return entity, result.Error
 }
 
-// GetPersonByID returns a person by ID.
-func (s Store) GetPersonByID(ctx context.Context, id string) (types.ApPerson, error) {
-	ctx, span := tracer.Start(ctx, "StoreGetPersonByID")
-	defer span.End()
-
-	var person types.ApPerson
-	result := s.db.WithContext(ctx).Where("id = ?", id).First(&person)
-	return person, result.Error
-}
-
-// UpsertPerson upserts a person.
-func (s Store) UpsertPerson(ctx context.Context, person types.ApPerson) (types.ApPerson, error) {
-	ctx, span := tracer.Start(ctx, "StoreUpsertPerson")
-	defer span.End()
-
-	result := s.db.WithContext(ctx).Save(&person)
-	return person, result.Error
-}
-
 // Save Follower action
 func (s *Store) SaveFollower(ctx context.Context, follower types.ApFollower) error {
 	ctx, span := tracer.Start(ctx, "StoreSaveFollow")

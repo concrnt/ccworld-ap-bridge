@@ -10,40 +10,38 @@ import (
 	"log"
 	"strings"
 
+	"github.com/totegamma/concurrent/client"
+	"github.com/totegamma/concurrent/core"
+
 	"github.com/concrnt/ccworld-ap-bridge/apclient"
+	"github.com/concrnt/ccworld-ap-bridge/bridge"
 	"github.com/concrnt/ccworld-ap-bridge/store"
 	"github.com/concrnt/ccworld-ap-bridge/types"
+	"github.com/concrnt/ccworld-ap-bridge/world"
 )
 
 type Service struct {
 	store    *store.Store
+	client   client.Client
 	apclient *apclient.ApClient
+	bridge   *bridge.Service
 	config   types.ApConfig
 }
 
 func NewService(
 	store *store.Store,
+	client client.Client,
 	apclient *apclient.ApClient,
+	bridge *bridge.Service,
 	config types.ApConfig,
 ) *Service {
 	return &Service{
 		store,
+		client,
 		apclient,
+		bridge,
 		config,
 	}
-}
-
-func (s *Service) GetPerson(ctx context.Context, id string) (types.ApPerson, error) {
-	ctx, span := tracer.Start(ctx, "Api.Service.GetPerson")
-	defer span.End()
-
-	person, err := s.store.GetPersonByID(ctx, id)
-	if err != nil {
-		span.RecordError(err)
-		return types.ApPerson{}, err
-	}
-
-	return person, nil
 }
 
 func (s *Service) UpdateEntityAliases(ctx context.Context, requester string, aliases []string) (types.ApEntity, error) {
@@ -237,8 +235,23 @@ func (s *Service) CreateEntity(ctx context.Context, requester string, id string)
 	}
 }
 
-func (s *Service) GetEntityID(ctx context.Context, ccid string) (types.ApEntity, error) {
-	ctx, span := tracer.Start(ctx, "Api.Service.GetEntityID")
+func (s *Service) GetEntityByID(ctx context.Context, id string) (types.ApEntity, error) {
+	ctx, span := tracer.Start(ctx, "Api.Service.GetEntityByID")
+	defer span.End()
+
+	entity, err := s.store.GetEntityByID(ctx, id)
+	if err != nil {
+		span.RecordError(err)
+		return types.ApEntity{}, err
+	}
+
+	entity.Privatekey = ""
+
+	return entity, nil
+}
+
+func (s *Service) GetEntityByCCID(ctx context.Context, ccid string) (types.ApEntity, error) {
+	ctx, span := tracer.Start(ctx, "Api.Service.GetEntityByID")
 	defer span.End()
 
 	entity, err := s.store.GetEntityByCCID(ctx, ccid)
@@ -315,4 +328,58 @@ func (s *Service) ResolvePerson(ctx context.Context, id, requester string) (type
 	}
 
 	return person, nil
+}
+
+func (s *Service) ImportNote(ctx context.Context, noteID, requester string) (core.Message, error) {
+	ctx, span := tracer.Start(ctx, "Api.Service.ImportNote")
+	defer span.End()
+
+	entity, err := s.store.GetEntityByCCID(ctx, requester)
+	if err != nil {
+		span.RecordError(err)
+		return core.Message{}, err
+	}
+
+	existing, err := s.store.GetApObjectReferenceByApObjectID(ctx, noteID)
+	if err == nil {
+		message, err := s.client.GetMessage(ctx, s.config.FQDN, existing.CcObjectID, nil)
+		if err == nil {
+			return message, nil
+		}
+		log.Println("message not found: ", existing.CcObjectID, err)
+		s.store.DeleteApObjectReference(ctx, noteID)
+	}
+
+	// fetch note
+	note, err := s.apclient.FetchNote(ctx, noteID, entity)
+	if err != nil {
+		span.RecordError(err)
+		return core.Message{}, err
+	}
+
+	// save person
+	person, err := s.apclient.FetchPerson(ctx, note.AttributedTo, entity)
+	if err != nil {
+		span.RecordError(err)
+		return core.Message{}, err
+	}
+
+	// save note as concurrent message
+	created, err := s.bridge.NoteToMessage(ctx, note, person, []string{world.UserHomeStream + "@" + s.config.ProxyCCID})
+	if err != nil {
+		span.RecordError(err)
+		return core.Message{}, err
+	}
+
+	// save reference
+	err = s.store.CreateApObjectReference(ctx, types.ApObjectReference{
+		ApObjectID: noteID,
+		CcObjectID: created.ID,
+	})
+	if err != nil {
+		span.RecordError(err)
+		return core.Message{}, err
+	}
+
+	return created, nil
 }
