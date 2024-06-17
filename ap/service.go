@@ -540,6 +540,178 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, id string) (
 			return types.ApObject{}, nil
 		}
 
+	case "Announce":
+		announceObject, ok := object.Object.(string)
+		if !ok {
+			log.Println("Invalid announce object", object.Object)
+			return types.ApObject{}, errors.New("Invalid request body")
+		}
+		// check if the note is already exists
+		_, err := s.store.GetApObjectReferenceByCcObjectID(ctx, object.ID)
+		if err == nil {
+			// already exists
+			log.Println("note already exists")
+			return types.ApObject{}, nil
+		}
+
+		// preserve reference
+		err = s.store.CreateApObjectReference(ctx, types.ApObjectReference{
+			ApObjectID: object.ID,
+			CcObjectID: "",
+		})
+
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, nil
+		}
+
+		// list up follows
+		follows, err := s.store.GetFollowsByPublisher(ctx, object.Actor)
+		if err != nil {
+			log.Println("Internal server error (get follows error)", err)
+			span.RecordError(err)
+			return types.ApObject{}, errors.New("Internal server error (get follows error)")
+		}
+
+		var rep types.ApEntity
+		destStreams := []string{}
+		for _, follow := range follows {
+			entity, err := s.store.GetEntityByID(ctx, follow.SubscriberUserID)
+			if err != nil {
+				log.Println("Internal server error (get entity error)", err)
+				span.RecordError(err)
+				continue
+			}
+			rep = entity
+			destStreams = append(destStreams, world.UserApStream+"@"+entity.CCID)
+		}
+
+		if len(destStreams) == 0 {
+			log.Println("No followers")
+			return types.ApObject{}, nil
+		}
+
+		person, err := s.apclient.FetchPerson(ctx, object.Actor, rep)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, errors.New("failed to fetch actor")
+		}
+
+		var sourceMessage core.Message
+
+		// import note
+		existing, err := s.store.GetApObjectReferenceByApObjectID(ctx, announceObject)
+		if err == nil {
+			message, err := s.client.GetMessage(ctx, s.config.FQDN, existing.CcObjectID, nil)
+			if err == nil {
+				sourceMessage = message
+			}
+			log.Println("message not found: ", existing.CcObjectID, err)
+			s.store.DeleteApObjectReference(ctx, announceObject)
+		} else {
+			// fetch note
+			note, err := s.apclient.FetchNote(ctx, announceObject, rep)
+			if err != nil {
+				span.RecordError(err)
+				return types.ApObject{}, err
+			}
+
+			// save person
+			person, err := s.apclient.FetchPerson(ctx, note.AttributedTo, rep)
+			if err != nil {
+				span.RecordError(err)
+				return types.ApObject{}, err
+			}
+
+			// save note as concurrent message
+			sourceMessage, err = s.bridge.NoteToMessage(ctx, note, person, []string{world.UserHomeStream + "@" + s.config.ProxyCCID})
+			if err != nil {
+				span.RecordError(err)
+				return types.ApObject{}, err
+			}
+
+			// save reference
+			err = s.store.CreateApObjectReference(ctx, types.ApObjectReference{
+				ApObjectID: announceObject,
+				CcObjectID: sourceMessage.ID,
+			})
+			if err != nil {
+				span.RecordError(err)
+				return types.ApObject{}, err
+			}
+		}
+
+		username := person.Name
+		if len(username) == 0 {
+			username = person.PreferredUsername
+		}
+
+		doc := core.MessageDocument[world.RerouteMessage]{
+			DocumentBase: core.DocumentBase[world.RerouteMessage]{
+				Signer:   s.config.ProxyCCID,
+				Type:     "message",
+				Schema:   world.RerouteMessageSchema,
+				SignedAt: time.Now(),
+				Body: world.RerouteMessage{
+					RerouteMessageID:     sourceMessage.ID,
+					RerouteMessageAuthor: sourceMessage.Author,
+					Body:                 object.Content,
+					ProfileOverride: world.ProfileOverride{
+						Username:    username,
+						Avatar:      person.Icon.URL,
+						Description: person.Summary,
+						Link:        person.URL,
+					},
+				},
+				Meta: map[string]interface{}{
+					"apActor":          person.URL,
+					"apObject":         object.ID,
+					"apPublisherInbox": person.Inbox,
+				},
+			},
+			Timelines: destStreams,
+		}
+
+		document, err := json.Marshal(doc)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, errors.New("Internal server error (json marshal error)")
+		}
+
+		signatureBytes, err := core.SignBytes(document, s.config.ProxyPriv)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, errors.New("Internal server error (sign error)")
+		}
+
+		signature := hex.EncodeToString(signatureBytes)
+
+		commitObj := core.Commit{
+			Document:  string(document),
+			Signature: string(signature),
+		}
+
+		commit, err := json.Marshal(commitObj)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, errors.New("Internal server error (json marshal error)")
+		}
+
+		var created core.ResponseBase[core.Message]
+		_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), &created, nil)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, errors.New("Internal server error (post message error)")
+		}
+
+		// save reference
+		err = s.store.UpdateApObjectReference(ctx, types.ApObjectReference{
+			ApObjectID: object.ID,
+			CcObjectID: created.Content.ID,
+		})
+
+		return types.ApObject{}, nil
+
 	case "Accept":
 		acceptObject, ok := object.Object.(map[string]interface{})
 		if !ok {
