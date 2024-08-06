@@ -355,7 +355,17 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			username = person.PreferredUsername
 		}
 
-		if (object.Tag == nil) || (object.Tag[0].Name[0] != ':') {
+		tag, ok := object.Tag.(types.Tag)
+		if !ok {
+			tags, ok := object.Tag.([]types.Tag)
+			if !ok {
+				log.Println("Invalid tag object", object.Tag)
+				return types.ApObject{}, errors.New("Invalid request body")
+			}
+			tag = tags[0]
+		}
+
+		if (object.Tag == nil) || (tag.Name[0] != ':') {
 			doc = core.AssociationDocument[world.ReactionAssociation]{
 				DocumentBase: core.DocumentBase[world.ReactionAssociation]{
 					Signer: s.config.ProxyCCID,
@@ -385,8 +395,8 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 					Type:   "association",
 					Schema: world.ReactionAssociationSchema,
 					Body: world.ReactionAssociation{
-						Shortcode: object.Tag[0].Name,
-						ImageURL:  object.Tag[0].Icon.URL,
+						Shortcode: tag.Name,
+						ImageURL:  tag.Icon.URL,
 						ProfileOverride: world.ProfileOverride{
 							Username:    username,
 							Avatar:      person.Icon.URL,
@@ -400,7 +410,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 					SignedAt: time.Now(),
 				},
 				Target:  targetID,
-				Variant: object.Tag[0].Icon.URL,
+				Variant: tag.Icon.URL,
 			}
 		}
 

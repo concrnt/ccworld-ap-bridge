@@ -60,12 +60,12 @@ type NodeInfoMetadataMaintainer struct {
 // ---------------------------------------------------------------------
 
 type ApObject struct {
-	Context           interface{}      `json:"@context,omitempty"`
+	Context           any              `json:"@context,omitempty"`
 	Actor             string           `json:"actor,omitempty"`
 	Type              string           `json:"type,omitempty"`
 	ID                string           `json:"id,omitempty"`
-	To                interface{}      `json:"to,omitempty"`
-	Tag               []Tag            `json:"tag,omitempty"`
+	To                any              `json:"to,omitempty"`
+	Tag               any              `json:"tag,omitempty"`
 	Attachment        []Attachment     `json:"attachment,omitempty"`
 	InReplyTo         string           `json:"inReplyTo,omitempty"`
 	Content           string           `json:"content,omitempty"`
@@ -123,6 +123,7 @@ type Tag struct {
 	ID   string `json:"id,omitempty"`
 	Name string `json:"name,omitempty"`
 	Icon Icon   `json:"icon,omitempty"`
+	Href string `json:"href,omitempty"`
 }
 
 // ---------------------------------------------------------------------
