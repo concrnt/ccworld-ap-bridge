@@ -172,7 +172,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 	text := document.Body.Body
 
 	// extract image url of markdown notation
-	imagePattern := regexp.MustCompile(`!\[.*\]\((.*)\)`)
+	imagePattern := regexp.MustCompile(`!\[[^]]*\]\(([^)]*)\)`)
 	matches := imagePattern.FindAllStringSubmatch(text, -1)
 	for _, match := range matches {
 		images = append(images, match[1])
@@ -198,6 +198,16 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 		}
 	}
 
+	// extract sensitive content
+	sensitivePattern := regexp.MustCompile(`<details>((.|\n)*)<summary>((.|\n)*)<\/summary>((.|\n)*)<\/details>`)
+	sensitiveMatches := sensitivePattern.FindSubmatch([]byte(text))
+	summary := ""
+	if len(sensitiveMatches) > 0 {
+		//text = string(sensitiveMatches[3]) + "\n" + string(sensitiveMatches[5])
+		summary = string(sensitiveMatches[3])
+		text = string(sensitiveMatches[5])
+	}
+
 	attachments := []types.Attachment{}
 	for _, imageURL := range images {
 		attachment := types.Attachment{
@@ -215,6 +225,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 			Type:         "Note",
 			ID:           "https://" + s.config.FQDN + "/ap/note/" + message.ID,
 			AttributedTo: "https://" + s.config.FQDN + "/ap/acct/" + authorEntity.ID,
+			Summary:      summary,
 			Content:      text,
 			Published:    document.SignedAt.Format(time.RFC3339),
 			To:           []string{"https://www.w3.org/ns/activitystreams#Public"},
