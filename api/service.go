@@ -383,3 +383,17 @@ func (s *Service) ImportNote(ctx context.Context, noteID, requester string) (cor
 
 	return created, nil
 }
+
+func (s *Service) UpsertUserSettings(ctx context.Context, settings types.ApUserSettings) error {
+	ctx, span := tracer.Start(ctx, "Api.Service.UpsertUserSettings")
+	defer span.End()
+
+	return s.store.UpsertUserSettings(ctx, settings)
+}
+
+func (s *Service) GetUserSettings(ctx context.Context, requester string) (types.ApUserSettings, error) {
+	ctx, span := tracer.Start(ctx, "Api.Service.GetUserSettings")
+	defer span.End()
+
+	return s.store.GetUserSettings(ctx, requester)
+}

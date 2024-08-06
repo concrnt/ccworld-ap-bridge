@@ -36,3 +36,8 @@ type ApObjectReference struct {
 	ApObjectID string `json:"apobjectID" gorm:"primaryKey;type:text;"`
 	CcObjectID string `json:"ccobjectID" gorm:"type:text;"`
 }
+
+type ApUserSettings struct {
+	CCID            string         `json:"ccid" gorm:"type:char(42);primaryKey"`
+	ListenTimelines pq.StringArray `json:"listen_timelines" gorm:"type:text[]"`
+}

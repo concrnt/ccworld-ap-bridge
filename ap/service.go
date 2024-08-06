@@ -236,19 +236,22 @@ func (s *Service) Note(ctx context.Context, id string) (types.ApObject, error) {
 	return note, nil
 }
 
-func (s *Service) Inbox(ctx context.Context, object types.ApObject) (types.ApObject, error) {
+func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId string) (types.ApObject, error) {
 	ctx, span := tracer.Start(ctx, "Ap.Service.Inbox")
 	defer span.End()
 
 	switch object.Type {
 	case "Follow":
-
-		toStr, ok := object.To.(string)
-		if !ok {
-			log.Println("Invalid follow object", object.To)
-			return types.ApObject{}, errors.New("Invalid request body")
+		id := inboxId
+		if id == "" {
+			toStr, ok := object.To.(string)
+			if !ok {
+				jsonPrint("object", object)
+				log.Println("Invalid follow object", object.To)
+				return types.ApObject{}, errors.New("Invalid request body")
+			}
+			id = strings.TrimPrefix(toStr, "https://"+s.config.FQDN+"/ap/acct/")
 		}
-		id := strings.TrimPrefix(toStr, "https://"+s.config.FQDN+"/ap/acct/")
 		if id == "" {
 			log.Println("Invalid username")
 			return types.ApObject{}, errors.New("Invalid username")

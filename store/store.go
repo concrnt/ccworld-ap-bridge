@@ -25,6 +25,22 @@ func NewStore(db *gorm.DB) *Store {
 	return &Store{db: db}
 }
 
+func (s Store) GetUserSettings(ctx context.Context, id string) (types.ApUserSettings, error) {
+	ctx, span := tracer.Start(ctx, "StoreGetUserSettings")
+	defer span.End()
+
+	var settings types.ApUserSettings
+	result := s.db.WithContext(ctx).Where("cc_id = ?", id).First(&settings)
+	return settings, result.Error
+}
+
+func (s Store) UpsertUserSettings(ctx context.Context, settings types.ApUserSettings) error {
+	ctx, span := tracer.Start(ctx, "StoreUpsertUserSettings")
+	defer span.End()
+
+	return s.db.WithContext(ctx).Save(&settings).Error
+}
+
 // GetEntityByID returns an entity by ID.
 func (s Store) GetEntityByID(ctx context.Context, id string) (types.ApEntity, error) {
 	ctx, span := tracer.Start(ctx, "StoreGetEntityByID")

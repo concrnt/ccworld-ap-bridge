@@ -147,7 +147,9 @@ func (h Handler) Inbox(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid request body")
 	}
 
-	result, err := h.service.Inbox(ctx, object)
+	id := c.Param("id")
+
+	result, err := h.service.Inbox(ctx, object, id)
 	if err != nil {
 		span.RecordError(err)
 		return c.String(http.StatusInternalServerError, "Internal server error: "+err.Error())

@@ -13,54 +13,126 @@ import (
 	"github.com/concrnt/ccworld-ap-bridge/world"
 )
 
+type DeliverState struct {
+	Dests   []string
+	Listens []string
+}
+
+func (d DeliverState) Equals(other DeliverState) bool {
+	if len(d.Dests) != len(other.Dests) {
+		return false
+	}
+
+	for _, dest := range d.Dests {
+		if !slices.Contains(other.Dests, dest) {
+			return false
+		}
+	}
+
+	if len(d.Listens) != len(other.Listens) {
+		return false
+	}
+
+	for _, listen := range d.Listens {
+		if !slices.Contains(other.Listens, listen) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (w *Worker) StartMessageWorker() {
 
 	log.Printf("start message worker")
 
 	ticker10 := time.NewTicker(10 * time.Second)
 	workers := make(map[string]context.CancelFunc)
+	states := make(map[string]DeliverState)
 
-	for {
-		<-ticker10.C
+	for ; true; <-ticker10.C {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 
-		jobs, err := w.store.GetAllFollowers(ctx)
+		followers, err := w.store.GetAllFollowers(ctx)
 		if err != nil {
 			log.Printf("error: %v", err)
 		}
 
-		for _, job := range jobs {
-			if _, ok := workers[job.ID]; !ok {
-				log.Printf("start worker %v\n", job.ID)
+		delivers := make(map[string][]types.ApFollower)
+		for _, job := range followers {
+			if _, ok := delivers[job.PublisherUserID]; !ok {
+				delivers[job.PublisherUserID] = make([]types.ApFollower, 0)
+			}
+			delivers[job.PublisherUserID] = append(delivers[job.PublisherUserID], job)
+		}
+
+		for userID, deliver := range delivers {
+			mustRestart := false
+			existingWorker, workerFound := workers[userID]
+			existingState, stateFound := states[userID]
+			if !workerFound || !stateFound {
+				mustRestart = true
+			}
+
+			entity, err := w.store.GetEntityByID(ctx, userID)
+			if err != nil {
+				log.Printf("error: %v", err)
+				continue
+			}
+			ownerID := entity.CCID
+
+			var newState DeliverState
+			listenTimelines := make([]string, 0)
+			userSettings, err := w.store.GetUserSettings(ctx, entity.CCID)
+			if err == nil {
+				listenTimelines = append(listenTimelines, userSettings.ListenTimelines...)
+			}
+
+			if len(listenTimelines) == 0 {
+				listenTimelines = append(listenTimelines, world.UserHomeStream+"@"+ownerID)
+			}
+
+			newState.Dests = make([]string, 0)
+			newState.Listens = listenTimelines
+			for _, job := range deliver {
+				newState.Dests = append(newState.Dests, job.SubscriberInbox)
+			}
+
+			if !newState.Equals(existingState) {
+				mustRestart = true
+			}
+
+			if mustRestart {
+				if workerFound {
+					log.Printf("cancel worker %v", userID)
+					existingWorker()
+				}
+
+				log.Printf("start worker %v\n", userID)
+
 				ctx, cancel := context.WithCancel(context.Background())
-				workers[job.ID] = cancel
+				workers[userID] = cancel
+				states[userID] = newState
 
-				entity, err := w.store.GetEntityByID(ctx, job.PublisherUserID)
-				if err != nil {
-					log.Printf("error: %v", err)
+				timelines := make([]string, 0)
+				for _, listenTimeline := range newState.Listens {
+					timeline, err := w.client.GetTimeline(ctx, w.config.FQDN, listenTimeline, nil)
+					if err != nil {
+						log.Printf("error: %v", err)
+						continue
+					}
+
+					timelines = append(timelines, timeline.ID+"@"+w.config.FQDN)
 				}
-				ownerID := entity.CCID
-				home := world.UserHomeStream + "@" + ownerID
-
-				timeline, err := w.client.GetTimeline(ctx, w.config.FQDN, home, nil)
-				if err != nil {
-					log.Printf("error: %v", err)
-					continue
-				}
-
-				normalized := timeline.ID + "@" + w.config.FQDN
 
 				pubsub := w.rdb.Subscribe(ctx)
-				pubsub.Subscribe(ctx, normalized)
+				pubsub.Subscribe(ctx, timelines...)
 
-				log.Printf("subscribed to %v(%v)\n", normalized, home)
-
-				go func(ctx context.Context, job types.ApFollower) {
+				go func(ctx context.Context, publisherUserID string, subscriberInboxes []string) {
 					for {
 						select {
 						case <-ctx.Done():
-							log.Printf("worker %v done", job.ID)
 							return
 						default:
 							pubsubMsg, err := pubsub.ReceiveMessage(ctx)
@@ -86,19 +158,7 @@ func (w *Worker) StartMessageWorker() {
 								continue
 							}
 
-							/*
-							   str, err := json.Marshal(streamEvent.Resource)
-							   if err != nil {
-							       log.Printf(errors.Wrap(err, "failed to marshal resource").Error())
-							       continue
-							   }
-							   var message core.Message
-							   err = json.Unmarshal(str, &message)
-							   if err != nil {
-							       log.Printf("error: %v", err)
-							       continue
-							   }
-							*/
+							var object *types.ApObject
 
 							switch document.Type {
 							case "message":
@@ -125,40 +185,26 @@ func (w *Worker) StartMessageWorker() {
 											Context: []string{"https://www.w3.org/ns/activitystreams"},
 											Type:    "Announce",
 											ID:      "https://" + w.config.FQDN + "/ap/note/" + messageID + "/activity",
-											Actor:   "https://" + w.config.FQDN + "/ap/acct/" + job.PublisherUserID,
+											Actor:   "https://" + w.config.FQDN + "/ap/acct/" + publisherUserID,
 											Content: "",
 											Object:  note.Object,
 											To:      []string{"https://www.w3.org/ns/activitystreams#Public"},
 										}
-
-										err = w.apclient.PostToInbox(ctx, job.SubscriberInbox, announce, entity)
-										if err != nil {
-											log.Printf("error: %v", err)
-											continue
-										}
-										log.Printf("[worker %v] created", job.ID)
+										object = &announce
 									} else {
-
 										create := types.ApObject{
 											Context: []string{"https://www.w3.org/ns/activitystreams"},
 											Type:    "Create",
 											ID:      "https://" + w.config.FQDN + "/ap/note/" + messageID + "/activity",
-											Actor:   "https://" + w.config.FQDN + "/ap/acct/" + job.PublisherUserID,
+											Actor:   "https://" + w.config.FQDN + "/ap/acct/" + publisherUserID,
 											To:      []string{"https://www.w3.org/ns/activitystreams#Public"},
 											Object:  note,
 										}
-
-										err = w.apclient.PostToInbox(ctx, job.SubscriberInbox, create, entity)
-										if err != nil {
-											log.Printf("error: %v", err)
-											continue
-										}
-										log.Printf("[worker %v] created", job.ID)
+										object = &create
 									}
 								}
 							case "delete":
 								{
-
 									var deleteDoc core.DeleteDocument
 									err = json.Unmarshal([]byte(streamEvent.Document), &deleteDoc)
 									if err != nil {
@@ -170,18 +216,13 @@ func (w *Worker) StartMessageWorker() {
 										Context: "https://www.w3.org/ns/activitystreams",
 										Type:    "Delete",
 										ID:      "https://" + w.config.FQDN + "/ap/note/" + deleteDoc.Target + "/delete",
-										Actor:   "https://" + w.config.FQDN + "/ap/acct/" + job.PublisherUserID,
+										Actor:   "https://" + w.config.FQDN + "/ap/acct/" + publisherUserID,
 										Object: types.ApObject{
 											Type: "Tombstone",
 											ID:   "https://" + w.config.FQDN + "/ap/note/" + deleteDoc.Target,
 										},
 									}
-
-									err = w.apclient.PostToInbox(ctx, job.SubscriberInbox, deleteObj, entity)
-									if err != nil {
-										log.Printf("error: %v", err)
-										continue
-									}
+									object = &deleteObj
 								}
 							default:
 								{
@@ -189,20 +230,31 @@ func (w *Worker) StartMessageWorker() {
 									continue
 								}
 							}
+
+							if object != nil {
+								for _, subscriberInbox := range subscriberInboxes {
+									err = w.apclient.PostToInbox(ctx, subscriberInbox, *object, entity)
+									if err != nil {
+										log.Printf("error: %v", err)
+										continue
+									}
+								}
+							}
+
 						}
 					}
-				}(ctx, job)
+				}(ctx, userID, newState.Dests)
 			}
 		}
 
 		// create job id list
-		var jobIDs []string
-		for _, job := range jobs {
-			jobIDs = append(jobIDs, job.ID)
+		var validUsers []string
+		for userID := range workers {
+			validUsers = append(validUsers, userID)
 		}
 
 		for routineID, cancel := range workers {
-			if !slices.Contains(jobIDs, routineID) {
+			if !slices.Contains(validUsers, routineID) {
 				log.Printf("cancel worker %v", routineID)
 				cancel()
 				delete(workers, routineID)

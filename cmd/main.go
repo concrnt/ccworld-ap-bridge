@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/labstack/echo-contrib/echoprometheus"
@@ -24,6 +25,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 	"gorm.io/plugin/opentelemetry/tracing"
 
 	"github.com/concrnt/ccworld-ap-bridge/ap"
@@ -81,7 +83,20 @@ func main() {
 
 	e.Binder = &apmiddleware.Binder{}
 
-	db, err := gorm.Open(postgres.Open(config.Server.Dsn), &gorm.Config{})
+	gormLogger := logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
+		logger.Config{
+			SlowThreshold:             300 * time.Millisecond, // Slow SQL threshold
+			LogLevel:                  logger.Warn,            // Log level
+			IgnoreRecordNotFoundError: true,                   // Ignore ErrRecordNotFound error for logger
+			Colorful:                  true,                   // Enable color
+		},
+	)
+
+	db, err := gorm.Open(postgres.Open(config.Server.Dsn), &gorm.Config{
+		Logger:         gormLogger,
+		TranslateError: true,
+	})
 	if err != nil {
 		panic("failed to connect database")
 	}
@@ -111,6 +126,7 @@ func main() {
 		&types.ApFollow{},
 		&types.ApFollower{},
 		&types.ApObjectReference{},
+		&types.ApUserSettings{},
 	)
 
 	rdb := redis.NewClient(&redis.Options{
@@ -174,6 +190,8 @@ func main() {
 	ap.GET("/api/stats", apiHandler.GetStats, auth.Restrict(auth.ISREGISTERED))                        // ISLOCAL
 	ap.POST("/api/entities/aliases", apiHandler.UpdateEntityAliases, auth.Restrict(auth.ISREGISTERED)) // ISLOCAL
 	ap.GET("/api/import", apiHandler.ImportNote, auth.Restrict(auth.ISREGISTERED))                     // ISLOCAL
+	ap.GET("/api/settings", apiHandler.GetUserSettings, auth.Restrict(auth.ISREGISTERED))              // ISLOCAL
+	ap.POST("/api/settings", apiHandler.UpdateUserSettings, auth.Restrict(auth.ISREGISTERED))          // ISLOCAL
 
 	e.GET("/health", func(c echo.Context) (err error) {
 		ctx := c.Request().Context()

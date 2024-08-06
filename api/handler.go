@@ -1,12 +1,14 @@
 package api
 
 import (
-	"github.com/labstack/echo/v4"
-	"go.opentelemetry.io/otel"
 	"log"
 	"net/http"
 	"net/url"
 
+	"github.com/labstack/echo/v4"
+	"go.opentelemetry.io/otel"
+
+	"github.com/concrnt/ccworld-ap-bridge/types"
 	"github.com/totegamma/concurrent/core"
 )
 
@@ -235,4 +237,50 @@ func (h Handler) ImportNote(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": message})
+}
+
+func (h Handler) UpdateUserSettings(c echo.Context) error {
+	ctx, span := tracer.Start(c.Request().Context(), "Api.Service.UpdateUserSettings")
+	defer span.End()
+
+	requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
+	if !ok {
+		return c.JSON(http.StatusForbidden, echo.Map{"status": "error", "message": "requester not found"})
+	}
+
+	var settings types.ApUserSettings
+	err := c.Bind(&settings)
+	if err != nil {
+		span.RecordError(err)
+		return c.String(http.StatusBadRequest, "Invalid request body")
+	}
+
+	settings.CCID = requester
+
+	err = h.service.UpsertUserSettings(ctx, settings)
+	if err != nil {
+		span.RecordError(err)
+		log.Println("error upserting user settings: ", err)
+		return c.String(http.StatusNotFound, "entity not found")
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{"status": "ok"})
+}
+
+func (h Handler) GetUserSettings(c echo.Context) error {
+	ctx, span := tracer.Start(c.Request().Context(), "Api.Service.GetUserSettings")
+	defer span.End()
+
+	requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
+	if !ok {
+		return c.JSON(http.StatusForbidden, echo.Map{"status": "error", "message": "requester not found"})
+	}
+
+	settings, err := h.service.GetUserSettings(ctx, requester)
+	if err != nil {
+		span.RecordError(err)
+		return c.String(http.StatusNotFound, "entity not found")
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "content": settings})
 }
