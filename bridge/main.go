@@ -96,34 +96,88 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 		date = time.Now()
 	}
 
-	doc := core.MessageDocument[world.MarkdownMessage]{
-		DocumentBase: core.DocumentBase[world.MarkdownMessage]{
-			Signer: s.config.ProxyCCID,
-			Type:   "message",
-			Schema: world.MarkdownMessageSchema,
-			Body: world.MarkdownMessage{
-				Body: content,
-				ProfileOverride: world.ProfileOverride{
-					Username:    username,
-					Avatar:      person.Icon.URL,
-					Description: person.Summary,
-					Link:        person.URL,
+	var document []byte
+	if object.InReplyTo == "" {
+		doc := core.MessageDocument[world.MarkdownMessage]{
+			DocumentBase: core.DocumentBase[world.MarkdownMessage]{
+				Signer: s.config.ProxyCCID,
+				Type:   "message",
+				Schema: world.MarkdownMessageSchema,
+				Body: world.MarkdownMessage{
+					Body: content,
+					ProfileOverride: world.ProfileOverride{
+						Username:    username,
+						Avatar:      person.Icon.URL,
+						Description: person.Summary,
+						Link:        person.URL,
+					},
+					Emojis: emojis,
 				},
-				Emojis: emojis,
+				Meta: map[string]interface{}{
+					"apActor":          person.URL,
+					"apObjectRef":      object.ID,
+					"apPublisherInbox": person.Inbox,
+				},
+				SignedAt: date,
 			},
-			Meta: map[string]interface{}{
-				"apActor":          person.URL,
-				"apObjectRef":      object.ID,
-				"apPublisherInbox": person.Inbox,
-			},
-			SignedAt: date,
-		},
-		Timelines: destStreams,
-	}
+			Timelines: destStreams,
+		}
+		document, err = json.Marshal(doc)
+		if err != nil {
+			return core.Message{}, errors.Wrap(err, "json marshal error")
+		}
+	} else {
 
-	document, err := json.Marshal(doc)
-	if err != nil {
-		return core.Message{}, errors.Wrap(err, "json marshal error")
+		var ReplyToMessageID string
+		var ReplyToMessageAuthor string
+
+		if strings.HasPrefix(object.InReplyTo, "https://"+s.config.FQDN+"/ap/note/") {
+			replyToMessageID := strings.TrimPrefix(object.InReplyTo, "https://"+s.config.FQDN+"/ap/note/")
+			message, err := s.client.GetMessage(ctx, s.config.FQDN, replyToMessageID, nil)
+			if err != nil {
+				return core.Message{}, errors.Wrap(err, "message not found")
+			}
+			ReplyToMessageID = message.ID
+			ReplyToMessageAuthor = message.Author
+		} else {
+			ref, err := s.store.GetApObjectReferenceByApObjectID(ctx, object.InReplyTo)
+			if err != nil {
+				return core.Message{}, errors.Wrap(err, "object not found")
+			}
+			ReplyToMessageID = ref.CcObjectID
+			ReplyToMessageAuthor = s.config.ProxyCCID
+		}
+
+		doc := core.MessageDocument[world.ReplyMessage]{
+			DocumentBase: core.DocumentBase[world.ReplyMessage]{
+				Signer: s.config.ProxyCCID,
+				Type:   "message",
+				Schema: world.ReplyMessageSchema,
+				Body: world.ReplyMessage{
+					Body: content,
+					ProfileOverride: world.ProfileOverride{
+						Username:    username,
+						Avatar:      person.Icon.URL,
+						Description: person.Summary,
+						Link:        person.URL,
+					},
+					Emojis:               emojis,
+					ReplyToMessageID:     ReplyToMessageID,
+					ReplyToMessageAuthor: ReplyToMessageAuthor,
+				},
+				Meta: map[string]interface{}{
+					"apActor":          person.URL,
+					"apObjectRef":      object.ID,
+					"apPublisherInbox": person.Inbox,
+				},
+				SignedAt: date,
+			},
+			Timelines: destStreams,
+		}
+		document, err = json.Marshal(doc)
+		if err != nil {
+			return core.Message{}, errors.Wrap(err, "json marshal error")
+		}
 	}
 
 	signatureBytes, err := core.SignBytes(document, s.config.ProxyPriv)
