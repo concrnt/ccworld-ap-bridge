@@ -64,7 +64,7 @@ type ApObject struct {
 	Actor             string           `json:"actor,omitempty"`
 	Type              string           `json:"type,omitempty"`
 	ID                string           `json:"id,omitempty"`
-	To                []string         `json:"to,omitempty"`
+	To                interface{}      `json:"to,omitempty"`
 	Tag               []Tag            `json:"tag,omitempty"`
 	Attachment        []Attachment     `json:"attachment,omitempty"`
 	InReplyTo         string           `json:"inReplyTo,omitempty"`
