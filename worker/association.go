@@ -36,33 +36,37 @@ func (w *Worker) StartAssociationWorker() {
 	notificationStream := world.UserNotifyStream + "@" + w.config.ProxyCCID
 	timeline, err := w.client.GetTimeline(ctx, w.config.FQDN, notificationStream, nil)
 	if err != nil {
-		log.Printf("error: %v", err)
+		log.Printf("worker/association GetTimeline: %v", err)
 		return
 	}
 
 	normalized := timeline.ID + "@" + w.config.FQDN
 
 	pubsub := w.rdb.Subscribe(ctx)
-	pubsub.Subscribe(ctx, normalized)
+	err = pubsub.Subscribe(ctx, normalized)
+	if err != nil {
+		log.Printf("worker/association Subscribe: %v", err)
+		panic(err)
+	}
 
 	for {
 		pubsubMsg, err := pubsub.ReceiveMessage(ctx)
 		if err != nil {
-			log.Printf("error while receiving message: %v", err)
+			log.Printf("worker/association ReceiveMessage: %v", err)
 			continue
 		}
 
 		var streamEvent core.Event
 		err = json.Unmarshal([]byte(pubsubMsg.Payload), &streamEvent)
 		if err != nil {
-			log.Printf("error while unmarshalling stream event: %v", err)
+			log.Printf("worker/association unmarshal streamEvent: %v", err)
 			continue
 		}
 
 		var document core.DocumentBase[any]
 		err = json.Unmarshal([]byte(streamEvent.Document), &document)
 		if err != nil {
-			log.Printf("error while unmarshalling document: %v", err)
+			log.Printf("worker/association unmarshal document: %v", err)
 			continue
 		}
 
@@ -83,19 +87,18 @@ func (w *Worker) StartAssociationWorker() {
 		case "association":
 			{
 				if association.Target[0] != 'm' { // assert association target is message
-					log.Printf("target is not message: %v", association.Target)
 					continue
 				}
 
 				assauthor, err := w.store.GetEntityByCCID(ctx, association.Author) // TODO: handle remote
 				if err != nil {
-					log.Printf("get ass author entity failed: %v", err)
+					log.Printf("worker/association GetEntityByCCID: %v", err)
 					continue
 				}
 
 				token, err := createToken(w.config.FQDN, w.config.ProxyCCID, w.config.ProxyPriv)
 				if err != nil {
-					log.Printf("failed to generate token %v", err)
+					log.Printf("worker/association createToken %v", err)
 					continue
 				}
 
@@ -103,26 +106,26 @@ func (w *Worker) StartAssociationWorker() {
 					AuthToken: token,
 				})
 				if err != nil {
-					log.Printf("error while getting message: %v", err)
+					log.Printf("worker/association GetMessage: %v", err)
 					continue
 				}
 
 				var messageDoc core.MessageDocument[world.MarkdownMessage]
 				err = json.Unmarshal([]byte(msg.Document), &messageDoc)
 				if err != nil {
-					log.Printf("error while unmarshal messageDoc: %v", err)
+					log.Printf("worker/association unmarshal messageDoc: %v", err)
 					continue
 				}
 
 				msgMeta, ok := messageDoc.Meta.(map[string]interface{})
 				ref, ok := msgMeta["apObjectRef"].(string)
 				if !ok {
-					log.Printf("target Message is not activitypub message")
+					log.Printf("worker/association target Message is not activitypub message")
 					continue
 				}
 				dest, ok := msgMeta["apPublisherInbox"].(string)
 				if !ok {
-					log.Printf("target Message is not activitypub message")
+					log.Printf("worker/association target Message is not activitypub message")
 					continue
 				}
 
@@ -139,7 +142,7 @@ func (w *Worker) StartAssociationWorker() {
 
 					err = w.apclient.PostToInbox(ctx, dest, like, assauthor)
 					if err != nil {
-						log.Printf("error while posting to inbox: %v", err)
+						log.Printf("worker/association/like PostToInbox: %v", err)
 						continue
 					}
 					break
@@ -147,7 +150,7 @@ func (w *Worker) StartAssociationWorker() {
 					var reactionDoc core.AssociationDocument[world.ReactionAssociation]
 					err = json.Unmarshal([]byte(association.Document), &reactionDoc)
 					if err != nil {
-						log.Printf("error while unmarshalling reaction association: %v", err)
+						log.Printf("worker/association/reaction unmarshal reactionDoc: %v", err)
 						continue
 					}
 
@@ -177,20 +180,20 @@ func (w *Worker) StartAssociationWorker() {
 
 					err = w.apclient.PostToInbox(ctx, dest, like, assauthor)
 					if err != nil {
-						log.Printf("error while posting to inbox: %v", err)
+						log.Printf("worker/association/reaction PostToInbox: %v", err)
 						continue
 					}
 				case world.ReplyAssociationSchema:
 					var replyDoc core.AssociationDocument[world.ReplyAssociation]
 					err = json.Unmarshal([]byte(association.Document), &replyDoc)
 					if err != nil {
-						log.Printf("error while unmarshalling reply association: %v", err)
+						log.Printf("worker/association/reply unmarshal replyDoc: %v", err)
 						continue
 					}
 
 					token, err := createToken(w.config.FQDN, w.config.ProxyCCID, w.config.ProxyPriv)
 					if err != nil {
-						log.Printf("failed to generate token %v", err)
+						log.Printf("worker/association/reply createToken %v", err)
 						continue
 					}
 
@@ -198,14 +201,14 @@ func (w *Worker) StartAssociationWorker() {
 						AuthToken: token,
 					}) // TODO: handle remote
 					if err != nil {
-						log.Printf("error while getting reply message: %v", err)
+						log.Printf("worker/association/reply GetMessage: %v", err)
 						continue
 					}
 
 					var replyMessage core.MessageDocument[world.ReplyMessage]
 					err = json.Unmarshal([]byte(reply.Document), &replyMessage)
 					if err != nil {
-						log.Printf("error while unmarshalling reply message: %v", err)
+						log.Printf("worker/association/reply unmarshal replyMessage: %v", err)
 						continue
 					}
 
@@ -226,7 +229,7 @@ func (w *Worker) StartAssociationWorker() {
 
 					err = w.apclient.PostToInbox(ctx, dest, create, assauthor)
 					if err != nil {
-						log.Printf("error while posting to inbox: %v", err)
+						log.Printf("worker/association/reply PostToInbox: %v", err)
 						continue
 					}
 
@@ -234,7 +237,7 @@ func (w *Worker) StartAssociationWorker() {
 					var rerouteDoc core.AssociationDocument[world.RerouteAssociation]
 					err = json.Unmarshal([]byte(association.Document), &rerouteDoc)
 					if err != nil {
-						log.Printf("error while unmarshalling reroute association: %v", err)
+						log.Printf("worker/association/reroute unmarshal rerouteDoc: %v", err)
 						continue
 					}
 
@@ -249,7 +252,7 @@ func (w *Worker) StartAssociationWorker() {
 					}
 					err = w.apclient.PostToInbox(ctx, dest, announce, assauthor)
 					if err != nil {
-						log.Printf("error while posting to inbox: %v", err)
+						log.Printf("worker/association/reroute PostToInbox: %v", err)
 						continue
 					}
 				}
@@ -260,13 +263,13 @@ func (w *Worker) StartAssociationWorker() {
 			{
 				entity, err := w.store.GetEntityByCCID(ctx, association.Author)
 				if err != nil {
-					log.Printf("get entity by ccid failed: %v", err)
+					log.Printf("worker/association/delete GetEntityByCCID: %v", err)
 					continue
 				}
 
 				token, err := createToken(w.config.FQDN, w.config.ProxyCCID, w.config.ProxyPriv)
 				if err != nil {
-					log.Printf("failed to generate token %v", err)
+					log.Printf("worker/association/delete createToken %v", err)
 					continue
 				}
 
@@ -274,32 +277,32 @@ func (w *Worker) StartAssociationWorker() {
 					AuthToken: token,
 				})
 				if err != nil {
-					log.Printf("error: %v", err)
+					log.Printf("worker/association/delete GetMessage: %v", err)
 					continue
 				}
 
 				var messageDoc core.MessageDocument[world.MarkdownMessage]
 				err = json.Unmarshal([]byte(target.Document), &messageDoc)
 				if err != nil {
-					log.Printf("error: %v", err)
+					log.Printf("worker/association/delete unmarshal messageDoc: %v", err)
 					continue
 				}
 
 				messageMeta, ok := messageDoc.Meta.(map[string]any)
 				if !ok {
-					log.Printf("target Message is not activitypub message")
+					log.Printf("worker/association/delete target Message is not activitypub message")
 					continue
 				}
 
 				ref, ok := messageMeta["apObjectRef"].(string)
 				if !ok {
-					log.Printf("target Message is not activitypub message")
+					log.Printf("worker/association/delete target Message is not activitypub message")
 					continue
 				}
 
 				inbox, ok := messageMeta["apPublisherInbox"].(string)
 				if !ok {
-					log.Printf("target Message is not activitypub message")
+					log.Printf("worker/association/delete target Message is not activitypub message")
 					continue
 				}
 
@@ -319,14 +322,14 @@ func (w *Worker) StartAssociationWorker() {
 
 				err = w.apclient.PostToInbox(ctx, inbox, undo, entity)
 				if err != nil {
-					log.Printf("error: %v", err)
+					log.Printf("worker/association/delete PostToInbox: %v", err)
 					continue
 				}
 
 			}
 		default:
 			{
-				log.Printf("unknown document type: %v", document.Type)
+				log.Printf("worker/association unknown document type %v", document.Type)
 			}
 		}
 	}

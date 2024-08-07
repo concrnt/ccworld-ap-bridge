@@ -246,29 +246,24 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		if id == "" {
 			toStr, ok := object.To.(string)
 			if !ok {
-				jsonPrint("object", object)
-				log.Println("Invalid follow object", object.To)
-				return types.ApObject{}, errors.New("Invalid request body")
+				return types.ApObject{}, errors.New("ap/service/inbox/follow Invalid Follow ID")
 			}
 			id = strings.TrimPrefix(toStr, "https://"+s.config.FQDN+"/ap/acct/")
 		}
 		if id == "" {
-			log.Println("Invalid username")
-			return types.ApObject{}, errors.New("Invalid username")
+			return types.ApObject{}, errors.New("ap/service/inbox/follow Invalid Follow ID")
 		}
 
 		entity, err := s.store.GetEntityByID(ctx, id)
 		if err != nil {
-			log.Println("entity not found", err)
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("entity not found")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/follow GetEntityByID")
 		}
 
 		requester, err := s.apclient.FetchPerson(ctx, object.Actor, entity)
 		if err != nil {
-			log.Println("error fetching person", err)
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("Invalid request body")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/follow FetchPerson")
 		}
 		accept := types.ApObject{
 			Context: "https://www.w3.org/ns/activitystreams",
@@ -283,15 +278,14 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 
 		err = s.apclient.PostToInbox(ctx, requester.Inbox, accept, entity)
 		if err != nil {
-			log.Println("error posting to inbox", err)
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("Internal server error")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/follow PostToInbox")
 		}
 
 		// check follow already exists
 		_, err = s.store.GetFollowerByTuple(ctx, userID, requester.ID)
 		if err == nil {
-			log.Println("follow already exists")
+			log.Println("ap/service/inbox/follow follow already exists")
 			return types.ApObject{}, nil
 		}
 
@@ -303,26 +297,40 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			PublisherUserID:     userID,
 		})
 		if err != nil {
-			log.Println("error saving follow", err)
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("Internal server error(save follow error)")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/follow SaveFollower")
 		}
 
 		return types.ApObject{}, nil
 
 	case "Like":
-		targetID := strings.Replace(object.Object.(string), "https://"+s.config.FQDN+"/ap/note/", "", 1)
+		likeObject, ok := object.Object.(string)
+		if !ok {
+			return types.ApObject{}, errors.New("ap/service/inbox/like Invalid Like Object")
+		}
+
+		var targetID string
+		if strings.HasPrefix(likeObject, "https://"+s.config.FQDN+"/ap/note/") {
+			targetID = strings.TrimPrefix(likeObject, "https://"+s.config.FQDN+"/ap/note/")
+		} else {
+			ref, err := s.store.GetApObjectReferenceByApObjectID(ctx, likeObject)
+			if err != nil {
+				return types.ApObject{}, nil
+			}
+			targetID = ref.CcObjectID
+		}
+
 		token, err := createToken(s.config.FQDN, s.config.ProxyCCID, s.config.ProxyPriv)
 		if err != nil {
-			log.Printf("failed to generate token %v", err)
-			return types.ApObject{}, errors.New("Internal server error (generate token error)")
+			span.RecordError(err)
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like CreateToken")
 		}
 		targetMsg, err := s.client.GetMessage(ctx, s.config.FQDN, targetID, &client.Options{
 			AuthToken: token,
 		})
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("message not found")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like GetMessage")
 		}
 
 		err = s.store.CreateApObjectReference(ctx, types.ApObjectReference{
@@ -332,19 +340,19 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("like already exists")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like CreateApObjectReference")
 		}
 
 		entity, err := s.store.GetEntityByCCID(ctx, targetMsg.Author)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("entity not found")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like GetEntityByCCID")
 		}
 
 		person, err := s.apclient.FetchPerson(ctx, object.Actor, entity)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("failed to fetch actor")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like FetchPerson")
 		}
 
 		//var obj association.SignedObject
@@ -355,15 +363,12 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			username = person.PreferredUsername
 		}
 
-		tag, ok := object.Tag.(types.Tag)
-		if !ok {
-			tags, ok := object.Tag.([]types.Tag)
-			if !ok {
-				log.Println("Invalid tag object", object.Tag)
-				return types.ApObject{}, errors.New("Invalid request body")
-			}
-			tag = tags[0]
+		tags, err := types.ParseTags(object.Tag)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like ParseTags")
 		}
+		tag := tags[0]
 
 		if (object.Tag == nil) || (tag.Name[0] != ':') {
 			doc = core.AssociationDocument[world.ReactionAssociation]{
@@ -417,13 +422,13 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		document, err := json.Marshal(doc)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("Internal server error (json marshal error)")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like Marshal")
 		}
 
 		signatureBytes, err := core.SignBytes(document, s.config.ProxyPriv)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("Internal server error (sign error)")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like SignBytes")
 		}
 
 		signature := hex.EncodeToString(signatureBytes)
@@ -436,14 +441,14 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		commit, err := json.Marshal(commitObj)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("Internal server error (json marshal error)")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like Marshal")
 		}
 
 		var created core.ResponseBase[core.Association]
 		_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), &created, nil)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("Internal server error (post association error)")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like Commit")
 		}
 
 		// save reference
@@ -457,18 +462,15 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 	case "Create":
 		createObject, ok := object.Object.(map[string]interface{})
 		if !ok {
-			log.Println("Invalid create object", object.Object)
-			return types.ApObject{}, errors.New("Invalid request body")
+			return types.ApObject{}, errors.New("ap/service/inbox/create Invalid Create Object")
 		}
 		createType, ok := createObject["type"].(string)
 		if !ok {
-			log.Println("Invalid create object", object.Object)
-			return types.ApObject{}, errors.New("Invalid request body")
+			return types.ApObject{}, errors.New("ap/service/inbox/create Invalid Create Object")
 		}
 		createID, ok := createObject["id"].(string)
 		if !ok {
-			log.Println("Invalid create object", object.Object)
-			return types.ApObject{}, errors.New("Invalid request body")
+			return types.ApObject{}, errors.New("ap/service/inbox/create Invalid Create Object")
 		}
 		switch createType {
 		case "Note":
@@ -476,7 +478,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			_, err := s.store.GetApObjectReferenceByCcObjectID(ctx, createID)
 			if err == nil {
 				// already exists
-				log.Println("note already exists")
+				log.Println("ap/service/inbox/create note already exists")
 				return types.ApObject{}, nil
 			}
 
@@ -494,9 +496,8 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			// list up follows
 			follows, err := s.store.GetFollowsByPublisher(ctx, object.Actor)
 			if err != nil {
-				log.Println("Internal server error (get follows error)", err)
 				span.RecordError(err)
-				return types.ApObject{}, errors.New("Internal server error (get follows error)")
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/create GetFollowsByPublisher")
 			}
 
 			var rep types.ApEntity
@@ -504,7 +505,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			for _, follow := range follows {
 				entity, err := s.store.GetEntityByID(ctx, follow.SubscriberUserID)
 				if err != nil {
-					log.Println("Internal server error (get entity error)", err)
+					log.Println("ap/service/inbox/create GetEntityByID", err)
 					span.RecordError(err)
 					continue
 				}
@@ -513,30 +514,28 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			}
 
 			if len(destStreams) == 0 {
-				log.Println("No followers")
+				log.Println("ap/service/inbox/create No followers")
 				return types.ApObject{}, nil
 			}
 
 			person, err := s.apclient.FetchPerson(ctx, object.Actor, rep)
 			if err != nil {
 				span.RecordError(err)
-				return types.ApObject{}, errors.New("failed to fetch actor")
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/create FetchPerson")
 			}
 
 			// convertObject
 			noteBytes, err := json.Marshal(createObject)
 			if err != nil {
-				log.Println("Internal server error (json marshal error)", err)
 				span.RecordError(err)
-				return types.ApObject{}, errors.New("Internal server error (json marshal error)")
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/create Marshal")
 			}
 
 			var note types.ApObject
 			err = json.Unmarshal(noteBytes, &note)
 			if err != nil {
-				log.Println("Internal server error (json unmarshal error)", err)
 				span.RecordError(err)
-				return types.ApObject{}, errors.New("Internal server error (json unmarshal error)")
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/create Unmarshal")
 			}
 
 			created, err := s.bridge.NoteToMessage(ctx, note, person, destStreams)
@@ -553,7 +552,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			b, err := json.Marshal(object)
 			if err != nil {
 				span.RecordError(err)
-				return types.ApObject{}, errors.New("Internal server error (json marshal error)")
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/create Marshal")
 			}
 			log.Println("Unhandled Create Object", string(b))
 			return types.ApObject{}, nil
@@ -562,14 +561,13 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 	case "Announce":
 		announceObject, ok := object.Object.(string)
 		if !ok {
-			log.Println("Invalid announce object", object.Object)
-			return types.ApObject{}, errors.New("Invalid request body")
+			return types.ApObject{}, errors.New("ap/service/inbox/announce Invalid Announce Object")
 		}
 		// check if the note is already exists
 		_, err := s.store.GetApObjectReferenceByCcObjectID(ctx, object.ID)
 		if err == nil {
 			// already exists
-			log.Println("note already exists")
+			log.Println("ap/service/inbox/announce note already exists")
 			return types.ApObject{}, nil
 		}
 
@@ -587,9 +585,8 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		// list up follows
 		follows, err := s.store.GetFollowsByPublisher(ctx, object.Actor)
 		if err != nil {
-			log.Println("Internal server error (get follows error)", err)
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("Internal server error (get follows error)")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/announce GetFollowsByPublisher")
 		}
 
 		var rep types.ApEntity
@@ -597,7 +594,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		for _, follow := range follows {
 			entity, err := s.store.GetEntityByID(ctx, follow.SubscriberUserID)
 			if err != nil {
-				log.Println("Internal server error (get entity error)", err)
+				log.Println("ap/service/inbox/announce GetEntityByID", err)
 				span.RecordError(err)
 				continue
 			}
@@ -606,14 +603,14 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		}
 
 		if len(destStreams) == 0 {
-			log.Println("No followers")
+			log.Println("ap/service/inbox/announce No followers")
 			return types.ApObject{}, nil
 		}
 
 		person, err := s.apclient.FetchPerson(ctx, object.Actor, rep)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("failed to fetch actor")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/announce FetchPerson")
 		}
 
 		var sourceMessage core.Message
@@ -694,13 +691,13 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		document, err := json.Marshal(doc)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("Internal server error (json marshal error)")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/announce Marshal")
 		}
 
 		signatureBytes, err := core.SignBytes(document, s.config.ProxyPriv)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("Internal server error (sign error)")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/announce SignBytes")
 		}
 
 		signature := hex.EncodeToString(signatureBytes)
@@ -713,14 +710,14 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		commit, err := json.Marshal(commitObj)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("Internal server error (json marshal error)")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/announce Marshal")
 		}
 
 		var created core.ResponseBase[core.Message]
 		_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), &created, nil)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("Internal server error (post message error)")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/announce Commit")
 		}
 
 		// save reference
@@ -734,43 +731,35 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 	case "Accept":
 		acceptObject, ok := object.Object.(map[string]interface{})
 		if !ok {
-			log.Println("Invalid accept object", object.Object)
-			return types.ApObject{}, errors.New("Invalid request body")
+			return types.ApObject{}, errors.New("ap/service/inbox/accept Invalid Accept Object")
 		}
 		acceptType, ok := acceptObject["type"].(string)
 		if !ok {
-			log.Println("Invalid accept object", object.Object)
-			return types.ApObject{}, errors.New("Invalid request body")
+			return types.ApObject{}, errors.New("ap/service/inbox/accept Invalid Accept Object")
 		}
 		switch acceptType {
 		case "Follow":
 			objectID, ok := acceptObject["id"].(string)
 			if !ok {
-				log.Println("Invalid accept object", object.Object)
-				return types.ApObject{}, errors.New("Invalid request body")
+				return types.ApObject{}, errors.New("ap/service/inbox/accept Invalid Accept Object")
 			}
 			apFollow, err := s.store.GetFollowByID(ctx, objectID)
 			if err != nil {
 				span.RecordError(err)
-				return types.ApObject{}, errors.New("follow not found")
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/accept GetFollowByID")
 			}
 			apFollow.Accepted = true
 
 			_, err = s.store.UpdateFollow(ctx, apFollow)
 			if err != nil {
 				span.RecordError(err)
-				return types.ApObject{}, errors.New("Internal server error (update follow error)")
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/accept UpdateFollow")
 			}
 
 			return types.ApObject{}, nil
 		default:
 			// print request body
-			b, err := json.Marshal(object)
-			if err != nil {
-				span.RecordError(err)
-				return types.ApObject{}, errors.New("Internal server error (json marshal error)")
-			}
-			log.Println("Unhandled accept object", string(b))
+			jsonPrint("Unhandled accept object", object)
 			return types.ApObject{}, nil
 
 		}
@@ -778,27 +767,23 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 	case "Undo":
 		undoObject, ok := object.Object.(map[string]interface{})
 		if !ok {
-			log.Println("Invalid undo object", object.Object)
-			return types.ApObject{}, errors.New("Invalid request body")
+			return types.ApObject{}, errors.New("ap/service/inbox/undo Invalid Undo Object")
 		}
 		undoType, ok := undoObject["type"].(string)
 		if !ok {
-			log.Println("Invalid undo object", object.Object)
-			return types.ApObject{}, errors.New("Invalid request body")
+			return types.ApObject{}, errors.New("ap/service/inbox/undo Invalid Undo Object")
 		}
 		switch undoType {
 		case "Follow":
 
 			remote, ok := undoObject["actor"].(string)
 			if !ok {
-				log.Println("Invalid undo object", object.Object)
-				return types.ApObject{}, errors.New("Invalid request body")
+				return types.ApObject{}, errors.New("ap/service/inbox/undo/follow Invalid Undo Object")
 			}
 
 			obj, ok := undoObject["object"].(string)
 			if !ok {
-				log.Println("Invalid undo object", object.Object)
-				return types.ApObject{}, errors.New("Invalid request body")
+				return types.ApObject{}, errors.New("ap/service/inbox/undo/follow Invalid Undo Object")
 			}
 
 			local := strings.TrimPrefix(obj, "https://"+s.config.FQDN+"/ap/acct/")
@@ -806,26 +791,25 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			// check follow already deleted
 			_, err := s.store.GetFollowerByTuple(ctx, local, remote)
 			if err != nil {
-				log.Println("follow already undoed", local, remote)
+				log.Println("ap/service/inbox/undo/follow follow already undoed", local, remote)
 				return types.ApObject{}, nil
 			}
 			_, err = s.store.RemoveFollower(ctx, local, remote)
 			if err != nil {
-				log.Println("remove follower failed error", err)
 				span.RecordError(err)
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/undo/follow RemoveFollower")
 			}
 			return types.ApObject{}, nil
 
 		case "Like":
 			likeID, ok := undoObject["id"].(string)
 			if !ok {
-				log.Println("Invalid undo object", object.Object)
-				return types.ApObject{}, errors.New("Invalid request body")
+				return types.ApObject{}, errors.New("ap/service/inbox/undo/like Invalid Undo Object")
 			}
 			deleteRef, err := s.store.GetApObjectReferenceByApObjectID(ctx, likeID)
 			if err != nil {
 				span.RecordError(err)
-				return types.ApObject{}, errors.New("like not found")
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/undo/like GetApObjectReferenceByApObjectID")
 			}
 
 			doc := core.DeleteDocument{
@@ -840,13 +824,13 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			document, err := json.Marshal(doc)
 			if err != nil {
 				span.RecordError(err)
-				return types.ApObject{}, errors.New("Internal server error (json marshal error)")
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/undo/like Marshal")
 			}
 
 			signatureBytes, err := core.SignBytes(document, s.config.ProxyPriv)
 			if err != nil {
 				span.RecordError(err)
-				return types.ApObject{}, errors.New("Internal server error (sign error)")
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/undo/like SignBytes")
 			}
 
 			signature := hex.EncodeToString(signatureBytes)
@@ -859,19 +843,19 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			commit, err := json.Marshal(commitObj)
 			if err != nil {
 				span.RecordError(err)
-				return types.ApObject{}, errors.New("Internal server error (json marshal error)")
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/undo/like Marshal")
 			}
 
 			_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), nil, nil)
 			if err != nil {
 				span.RecordError(err)
-				return types.ApObject{}, errors.New("Internal server error (delete like error)")
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/undo/like Commit")
 			}
 
 			err = s.store.DeleteApObjectReference(ctx, deleteRef.ApObjectID)
 			if err != nil {
 				span.RecordError(err)
-				return types.ApObject{}, errors.New("Internal server error (delete reference error)")
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/undo/like DeleteApObjectReference")
 			}
 			return types.ApObject{}, nil
 
@@ -883,19 +867,19 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 	case "Delete":
 		deleteObject, ok := object.Object.(map[string]interface{})
 		if !ok {
-			jsonPrint("Invalid delete object", object)
-			return types.ApObject{}, nil
+			jsonPrint("Delete Object", object)
+			return types.ApObject{}, errors.New("ap/service/inbox/delete Invalid Delete Object")
 		}
 		deleteID, ok := deleteObject["id"].(string)
 		if !ok {
-			jsonPrint("Invalid delete object", object)
-			return types.ApObject{}, nil
+			jsonPrint("Delete Object", object)
+			return types.ApObject{}, errors.New("ap/service/inbox/delete Invalid Delete Object")
 		}
 
 		deleteRef, err := s.store.GetApObjectReferenceByApObjectID(ctx, deleteID)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, nil
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/delete GetApObjectReferenceByApObjectID")
 		}
 
 		doc := core.DeleteDocument{
@@ -910,13 +894,13 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		document, err := json.Marshal(doc)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("Internal server error (json marshal error)")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/delete Marshal")
 		}
 
 		signatureBytes, err := core.SignBytes(document, s.config.ProxyPriv)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("Internal server error (sign error)")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/delete SignBytes")
 		}
 
 		signature := hex.EncodeToString(signatureBytes)
@@ -929,19 +913,19 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		commit, err := json.Marshal(commitObj)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("Internal server error (json marshal error)")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/delete Marshal")
 		}
 
 		_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), nil, nil)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("Internal server error (delete error)")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/delete Commit")
 		}
 
 		err = s.store.DeleteApObjectReference(ctx, deleteRef.ApObjectID)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.New("Internal server error (delete error)")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/delete DeleteApObjectReference")
 		}
 		return types.ApObject{}, nil
 
@@ -950,5 +934,4 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		jsonPrint("Unhandled Activitypub Object", object)
 		return types.ApObject{}, nil
 	}
-
 }

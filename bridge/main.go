@@ -52,12 +52,9 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 		}
 	}
 
-	tags, ok := object.Tag.([]types.Tag)
-	if !ok {
-		tag, ok := object.Tag.(types.Tag)
-		if ok {
-			tags = append(tags, tag)
-		}
+	tags, err := types.ParseTags(object.Tag)
+	if err != nil {
+		tags = []types.Tag{}
 	}
 
 	var emojis map[string]world.Emoji = make(map[string]world.Emoji)

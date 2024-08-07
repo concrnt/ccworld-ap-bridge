@@ -56,7 +56,7 @@ func (w *Worker) StartMessageWorker() {
 
 		followers, err := w.store.GetAllFollowers(ctx)
 		if err != nil {
-			log.Printf("error: %v", err)
+			log.Printf("worker/message GetAllFollowers: %v", err)
 		}
 
 		delivers := make(map[string][]types.ApFollower)
@@ -77,7 +77,7 @@ func (w *Worker) StartMessageWorker() {
 
 			entity, err := w.store.GetEntityByID(ctx, userID)
 			if err != nil {
-				log.Printf("error: %v", err)
+				log.Printf("worker/message/%v GetEntityByID: %v", userID, err)
 				continue
 			}
 			ownerID := entity.CCID
@@ -105,11 +105,11 @@ func (w *Worker) StartMessageWorker() {
 
 			if mustRestart {
 				if workerFound {
-					log.Printf("cancel worker %v", userID)
+					log.Printf("worker/message/%v cancel worker\n", userID)
 					existingWorker()
 				}
 
-				log.Printf("start worker %v\n", userID)
+				log.Printf("worker/message/%v start worker \n", userID)
 
 				ctx, cancel := context.WithCancel(context.Background())
 				workers[userID] = cancel
@@ -119,15 +119,24 @@ func (w *Worker) StartMessageWorker() {
 				for _, listenTimeline := range newState.Listens {
 					timeline, err := w.client.GetTimeline(ctx, w.config.FQDN, listenTimeline, nil)
 					if err != nil {
-						log.Printf("error: %v", err)
+						log.Printf("worker/message/%v GetTimeline: %v", userID, err)
 						continue
 					}
 
 					timelines = append(timelines, timeline.ID+"@"+w.config.FQDN)
 				}
 
+				if len(timelines) == 0 {
+					log.Printf("worker/message/%v no timelines to listen", userID)
+					continue
+				}
+
 				pubsub := w.rdb.Subscribe(ctx)
-				pubsub.Subscribe(ctx, timelines...)
+				err := pubsub.Subscribe(ctx, timelines...)
+				if err != nil {
+					log.Printf("worker/message/%v pubsub.Subscribe %v", userID, err)
+					continue
+				}
 
 				go func(ctx context.Context, publisherUserID string, subscriberInboxes []string) {
 					for {
@@ -140,21 +149,25 @@ func (w *Worker) StartMessageWorker() {
 								continue
 							}
 							if err != nil {
-								log.Printf("error: %v", err)
+								log.Printf("worker/message/%v pubsub.ReceiveMessage %v", publisherUserID, err)
 								continue
 							}
 
 							var streamEvent core.Event
 							err = json.Unmarshal([]byte(pubsubMsg.Payload), &streamEvent)
 							if err != nil {
-								log.Printf("error: %v", err)
+								log.Printf("worker/message/%v json.Unmarshal streamEvent %v", publisherUserID, err)
 								continue
 							}
 
 							var document core.DocumentBase[any]
 							err = json.Unmarshal([]byte(streamEvent.Document), &document)
 							if err != nil {
-								log.Printf("error: %v", err)
+								log.Printf("worker/message/%v json.Unmarshal document %v", publisherUserID, err)
+								continue
+							}
+
+							if document.Signer != ownerID {
 								continue
 							}
 
@@ -164,19 +177,9 @@ func (w *Worker) StartMessageWorker() {
 							case "message":
 								{
 									messageID := streamEvent.Item.ResourceID
-									messageAuthor := streamEvent.Item.Owner
-									if streamEvent.Item.Author != nil {
-										messageAuthor = *streamEvent.Item.Author
-									}
-
-									if messageAuthor != ownerID {
-										log.Printf("message author is not owner: %v", messageAuthor)
-										continue
-									}
-
 									note, err := w.bridge.MessageToNote(ctx, messageID)
 									if err != nil {
-										log.Printf("error while converting message to note: %v", err)
+										log.Printf("worker/message/%v MessageToNote %v", publisherUserID, err)
 										continue
 									}
 
@@ -208,7 +211,11 @@ func (w *Worker) StartMessageWorker() {
 									var deleteDoc core.DeleteDocument
 									err = json.Unmarshal([]byte(streamEvent.Document), &deleteDoc)
 									if err != nil {
-										log.Printf("error: %v", err)
+										log.Printf("worker/message/%v json.Unmarshal deleteDoc %v", publisherUserID, err)
+										continue
+									}
+
+									if deleteDoc.Target[0] != 'm' {
 										continue
 									}
 
@@ -226,7 +233,6 @@ func (w *Worker) StartMessageWorker() {
 								}
 							default:
 								{
-									log.Printf("unknown document type: %v", document.Type)
 									continue
 								}
 							}
@@ -235,7 +241,7 @@ func (w *Worker) StartMessageWorker() {
 								for _, subscriberInbox := range subscriberInboxes {
 									err = w.apclient.PostToInbox(ctx, subscriberInbox, *object, entity)
 									if err != nil {
-										log.Printf("error: %v", err)
+										log.Printf("worker/message/%v PostToInbox %v %v", publisherUserID, subscriberInbox, err)
 										continue
 									}
 								}
@@ -255,7 +261,7 @@ func (w *Worker) StartMessageWorker() {
 
 		for routineID, cancel := range workers {
 			if !slices.Contains(validUsers, routineID) {
-				log.Printf("cancel worker %v", routineID)
+				log.Printf("worker/message/%v cancel worker\n", routineID)
 				cancel()
 				delete(workers, routineID)
 			}

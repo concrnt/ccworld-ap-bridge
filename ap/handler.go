@@ -1,6 +1,7 @@
 package ap
 
 import (
+	"log"
 	"net/http"
 	"slices"
 	"strings"
@@ -152,7 +153,8 @@ func (h Handler) Inbox(c echo.Context) error {
 	result, err := h.service.Inbox(ctx, object, id)
 	if err != nil {
 		span.RecordError(err)
-		return c.String(http.StatusInternalServerError, "Internal server error: "+err.Error())
+		log.Printf("api/handler/inbox %v", err)
+		return c.String(http.StatusOK, "Internal server error: "+err.Error()) // 再送されても基本同じなので200
 	}
 
 	c.Response().Header().Set("Content-Type", "application/activity+json")
