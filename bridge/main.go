@@ -261,7 +261,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 		return types.ApObject{}, errors.New("entity not found")
 	}
 
-	var document core.MessageDocument[world.MarkdownMessage]
+	var document core.MessageDocument[world.MediaMessage]
 	err = json.Unmarshal([]byte(message.Document), &document)
 	if err != nil {
 		return types.ApObject{}, errors.New("invalid payload")
@@ -277,6 +277,12 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 	matches := imagePattern.FindAllStringSubmatch(text, -1)
 	for _, match := range matches {
 		images = append(images, match[1])
+	}
+
+	if document.Body.Medias != nil {
+		for _, media := range *document.Body.Medias {
+			images = append(images, media.MediaURL)
+		}
 	}
 
 	// remove markdown notation
