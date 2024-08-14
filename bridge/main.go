@@ -325,7 +325,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 		attachments = append(attachments, attachment)
 	}
 
-	if document.Schema == world.MarkdownMessageSchema { // Note
+	if document.Schema == world.MarkdownMessageSchema || document.Schema == world.MediaMessageSchema { // Note
 
 		return types.ApObject{
 			Context:      "https://www.w3.org/ns/activitystreams",
