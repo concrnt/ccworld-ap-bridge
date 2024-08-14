@@ -1,11 +1,11 @@
 package world
 
 type Profile struct {
-	Username    string   `json:"username"`
-	Avatar      string   `json:"avatar"`
-	Description string   `json:"description"`
-	Banner      string   `json:"banner"`
-	Subprofiles []string `json:"subprofiles"`
+	Username    string    `json:"username"`
+	Avatar      string    `json:"avatar"`
+	Description string    `json:"description"`
+	Banner      string    `json:"banner"`
+	Subprofiles *[]string `json:"subprofiles"`
 }
 
 type Emoji struct {
@@ -13,53 +13,53 @@ type Emoji struct {
 }
 
 type ProfileOverride struct {
-	Username    string `json:"username"`
-	Avatar      string `json:"avatar"`
-	Description string `json:"description"`
-	Link        string `json:"link"`
-	CharacterID string `json:"characterID"`
+	Username    string `json:"username,omitempty"`
+	Avatar      string `json:"avatar,omitempty"`
+	Description string `json:"description,omitempty"`
+	Link        string `json:"link,omitempty"`
+	CharacterID string `json:"characterID,omitempty"`
 }
 
 type MarkdownMessage struct {
-	Body            string           `json:"body"`
-	Emojis          map[string]Emoji `json:"emojis"`
-	ProfileOverride ProfileOverride  `json:"profileOverride"`
+	Body            string            `json:"body"`
+	Emojis          *map[string]Emoji `json:"emojis,omitempty"`
+	ProfileOverride *ProfileOverride  `json:"profileOverride,omitempty"`
 }
 
 type ReactionAssociation struct {
-	ImageURL        string          `json:"imageUrl"`
-	Shortcode       string          `json:"shortcode"`
-	ProfileOverride ProfileOverride `json:"profileOverride"`
+	ImageURL        string           `json:"imageUrl"`
+	Shortcode       string           `json:"shortcode"`
+	ProfileOverride *ProfileOverride `json:"profileOverride"`
 }
 
 type LikeAssociation struct {
-	ProfileOverride ProfileOverride `json:"profileOverride"`
+	ProfileOverride *ProfileOverride `json:"profileOverride"`
 }
 
 type ReplyAssociation struct {
-	MessageID       string          `json:"messageId"`
-	MessageAuthor   string          `json:"messageAuthor"`
-	ProfileOverride ProfileOverride `json:"profileOverride"`
+	MessageID       string           `json:"messageId"`
+	MessageAuthor   string           `json:"messageAuthor"`
+	ProfileOverride *ProfileOverride `json:"profileOverride"`
 }
 
 type ReplyMessage struct {
-	ReplyToMessageID     string           `json:"replyToMessageId"`
-	ReplyToMessageAuthor string           `json:"replyToMessageAuthor"`
-	Body                 string           `json:"body"`
-	Emojis               map[string]Emoji `json:"emojis"`
-	ProfileOverride      ProfileOverride  `json:"profileOverride"`
+	ReplyToMessageID     string            `json:"replyToMessageId"`
+	ReplyToMessageAuthor string            `json:"replyToMessageAuthor"`
+	Body                 string            `json:"body"`
+	Emojis               *map[string]Emoji `json:"emojis"`
+	ProfileOverride      *ProfileOverride  `json:"profileOverride"`
 }
 
 type RerouteAssociation struct {
-	MessageID       string          `json:"messageId"`
-	MessageAuthor   string          `json:"messageAuthor"`
-	ProfileOverride ProfileOverride `json:"profileOverride"`
+	MessageID       string           `json:"messageId"`
+	MessageAuthor   string           `json:"messageAuthor"`
+	ProfileOverride *ProfileOverride `json:"profileOverride"`
 }
 
 type RerouteMessage struct {
-	RerouteMessageID     string           `json:"rerouteMessageId"`
-	RerouteMessageAuthor string           `json:"rerouteMessageAuthor"`
-	Body                 string           `json:"body"`
-	Emojis               map[string]Emoji `json:"emojis"`
-	ProfileOverride      ProfileOverride  `json:"profileOverride"`
+	RerouteMessageID     string            `json:"rerouteMessageId"`
+	RerouteMessageAuthor string            `json:"rerouteMessageAuthor"`
+	Body                 string            `json:"body"`
+	Emojis               *map[string]Emoji `json:"emojis"`
+	ProfileOverride      *ProfileOverride  `json:"profileOverride"`
 }

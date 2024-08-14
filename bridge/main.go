@@ -102,13 +102,13 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 				Schema: world.MarkdownMessageSchema,
 				Body: world.MarkdownMessage{
 					Body: content,
-					ProfileOverride: world.ProfileOverride{
+					ProfileOverride: &world.ProfileOverride{
 						Username:    username,
 						Avatar:      person.Icon.URL,
 						Description: person.Summary,
 						Link:        person.URL,
 					},
-					Emojis: emojis,
+					Emojis: &emojis,
 				},
 				Meta: map[string]interface{}{
 					"apActor":          person.URL,
@@ -152,13 +152,13 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 				Schema: world.ReplyMessageSchema,
 				Body: world.ReplyMessage{
 					Body: content,
-					ProfileOverride: world.ProfileOverride{
+					ProfileOverride: &world.ProfileOverride{
 						Username:    username,
 						Avatar:      person.Icon.URL,
 						Description: person.Summary,
 						Link:        person.URL,
 					},
-					Emojis:               emojis,
+					Emojis:               &emojis,
 					ReplyToMessageID:     ReplyToMessageID,
 					ReplyToMessageAuthor: ReplyToMessageAuthor,
 				},
@@ -240,8 +240,8 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 	// remove markdown notation
 	text = imagePattern.ReplaceAllString(text, "")
 
-	if len(document.Body.Emojis) > 0 {
-		for k, v := range document.Body.Emojis {
+	if len(*document.Body.Emojis) > 0 {
+		for k, v := range *document.Body.Emojis {
 			//imageURL, ok := v.(map[string]interface{})["imageURL"].(string)
 			emoji := types.Tag{
 				ID:   v.ImageURL,

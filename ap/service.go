@@ -378,7 +378,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 					Type:   "association",
 					Schema: world.LikeAssociationSchema,
 					Body: world.ReactionAssociation{
-						ProfileOverride: world.ProfileOverride{
+						ProfileOverride: &world.ProfileOverride{
 							Username:    username,
 							Avatar:      person.Icon.URL,
 							Description: person.Summary,
@@ -402,7 +402,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 					Body: world.ReactionAssociation{
 						Shortcode: tag.Name,
 						ImageURL:  tag.Icon.URL,
-						ProfileOverride: world.ProfileOverride{
+						ProfileOverride: &world.ProfileOverride{
 							Username:    username,
 							Avatar:      person.Icon.URL,
 							Description: person.Summary,
@@ -672,7 +672,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 					RerouteMessageID:     sourceMessage.ID,
 					RerouteMessageAuthor: sourceMessage.Author,
 					Body:                 object.Content,
-					ProfileOverride: world.ProfileOverride{
+					ProfileOverride: &world.ProfileOverride{
 						Username:    username,
 						Avatar:      person.Icon.URL,
 						Description: person.Summary,
