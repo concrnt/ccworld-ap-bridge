@@ -111,10 +111,6 @@ func (w *Worker) StartMessageWorker() {
 
 				log.Printf("worker/message/%v start worker \n", userID)
 
-				ctx, cancel := context.WithCancel(context.Background())
-				workers[userID] = cancel
-				states[userID] = newState
-
 				timelines := make([]string, 0)
 				for _, listenTimeline := range newState.Listens {
 					timeline, err := w.client.GetTimeline(ctx, w.config.FQDN, listenTimeline, nil)
@@ -138,6 +134,10 @@ func (w *Worker) StartMessageWorker() {
 					continue
 				}
 
+				workerctx, cancel := context.WithCancel(context.Background())
+				workers[userID] = cancel
+				states[userID] = newState
+
 				go func(ctx context.Context, publisherUserID string, subscriberInboxes []string) {
 					for {
 						select {
@@ -146,10 +146,14 @@ func (w *Worker) StartMessageWorker() {
 						default:
 							pubsubMsg, err := pubsub.ReceiveMessage(ctx)
 							if ctx.Err() != nil {
+								delete(workers, publisherUserID)
+								delete(states, publisherUserID)
 								continue
 							}
 							if err != nil {
 								log.Printf("worker/message/%v pubsub.ReceiveMessage %v", publisherUserID, err)
+								delete(workers, publisherUserID)
+								delete(states, publisherUserID)
 								continue
 							}
 
@@ -157,6 +161,8 @@ func (w *Worker) StartMessageWorker() {
 							err = json.Unmarshal([]byte(pubsubMsg.Payload), &streamEvent)
 							if err != nil {
 								log.Printf("worker/message/%v json.Unmarshal streamEvent %v", publisherUserID, err)
+								delete(workers, publisherUserID)
+								delete(states, publisherUserID)
 								continue
 							}
 
@@ -164,6 +170,8 @@ func (w *Worker) StartMessageWorker() {
 							err = json.Unmarshal([]byte(streamEvent.Document), &document)
 							if err != nil {
 								log.Printf("worker/message/%v json.Unmarshal document %v", publisherUserID, err)
+								delete(workers, publisherUserID)
+								delete(states, publisherUserID)
 								continue
 							}
 
@@ -249,7 +257,7 @@ func (w *Worker) StartMessageWorker() {
 
 						}
 					}
-				}(ctx, userID, newState.Dests)
+				}(workerctx, userID, newState.Dests)
 			}
 		}
 
