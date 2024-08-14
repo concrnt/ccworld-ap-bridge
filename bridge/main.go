@@ -46,12 +46,6 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 
 	content := object.Content
 
-	for _, attachment := range object.Attachment {
-		if attachment.Type == "Document" {
-			content += "\n\n![image](" + attachment.URL + ")"
-		}
-	}
-
 	tags, err := types.ParseTags(object.Tag)
 	if err != nil {
 		tags = []types.Tag{}
@@ -95,35 +89,83 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 
 	var document []byte
 	if object.InReplyTo == "" {
-		doc := core.MessageDocument[world.MarkdownMessage]{
-			DocumentBase: core.DocumentBase[world.MarkdownMessage]{
-				Signer: s.config.ProxyCCID,
-				Type:   "message",
-				Schema: world.MarkdownMessageSchema,
-				Body: world.MarkdownMessage{
-					Body: content,
-					ProfileOverride: &world.ProfileOverride{
-						Username:    username,
-						Avatar:      person.Icon.URL,
-						Description: person.Summary,
-						Link:        person.URL,
+
+		media := []world.Media{}
+		for _, attachment := range object.Attachment {
+			media = append(media, world.Media{
+				MediaURL:  attachment.URL,
+				MediaType: attachment.MediaType,
+			})
+		}
+
+		if len(object.Attachment) > 0 {
+			doc := core.MessageDocument[world.MediaMessage]{
+				DocumentBase: core.DocumentBase[world.MediaMessage]{
+					Signer: s.config.ProxyCCID,
+					Type:   "message",
+					Schema: world.MediaMessageSchema,
+					Body: world.MediaMessage{
+						Body: content,
+						ProfileOverride: &world.ProfileOverride{
+							Username:    username,
+							Avatar:      person.Icon.URL,
+							Description: person.Summary,
+							Link:        person.URL,
+						},
+						Medias: &media,
+						Emojis: &emojis,
 					},
-					Emojis: &emojis,
+					Meta: map[string]interface{}{
+						"apActor":          person.URL,
+						"apObjectRef":      object.ID,
+						"apPublisherInbox": person.Inbox,
+					},
+					SignedAt: date,
 				},
-				Meta: map[string]interface{}{
-					"apActor":          person.URL,
-					"apObjectRef":      object.ID,
-					"apPublisherInbox": person.Inbox,
+				Timelines: destStreams,
+			}
+			document, err = json.Marshal(doc)
+			if err != nil {
+				return core.Message{}, errors.Wrap(err, "json marshal error")
+			}
+		} else {
+			doc := core.MessageDocument[world.MarkdownMessage]{
+				DocumentBase: core.DocumentBase[world.MarkdownMessage]{
+					Signer: s.config.ProxyCCID,
+					Type:   "message",
+					Schema: world.MarkdownMessageSchema,
+					Body: world.MarkdownMessage{
+						Body: content,
+						ProfileOverride: &world.ProfileOverride{
+							Username:    username,
+							Avatar:      person.Icon.URL,
+							Description: person.Summary,
+							Link:        person.URL,
+						},
+						Emojis: &emojis,
+					},
+					Meta: map[string]interface{}{
+						"apActor":          person.URL,
+						"apObjectRef":      object.ID,
+						"apPublisherInbox": person.Inbox,
+					},
+					SignedAt: date,
 				},
-				SignedAt: date,
-			},
-			Timelines: destStreams,
+				Timelines: destStreams,
+			}
+			document, err = json.Marshal(doc)
+			if err != nil {
+				return core.Message{}, errors.Wrap(err, "json marshal error")
+			}
 		}
-		document, err = json.Marshal(doc)
-		if err != nil {
-			return core.Message{}, errors.Wrap(err, "json marshal error")
-		}
+
 	} else {
+
+		for _, attachment := range object.Attachment {
+			if attachment.Type == "Document" {
+				content += "\n\n![image](" + attachment.URL + ")"
+			}
+		}
 
 		var ReplyToMessageID string
 		var ReplyToMessageAuthor string

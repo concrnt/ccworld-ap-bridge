@@ -26,6 +26,20 @@ type MarkdownMessage struct {
 	ProfileOverride *ProfileOverride  `json:"profileOverride,omitempty"`
 }
 
+type Media struct {
+	MediaURL     string `json:"mediaURL"`
+	MediaType    string `json:"mediaType"`
+	ThumbnailURL string `json:"thumbnailURL,omitempty"`
+	Blurhash     string `json:"blurhash,omitempty"`
+}
+
+type MediaMessage struct {
+	Body            string            `json:"body"`
+	Emojis          *map[string]Emoji `json:"emojis,omitempty"`
+	Medias          *[]Media          `json:"medias,omitempty"`
+	ProfileOverride *ProfileOverride  `json:"profileOverride,omitempty"`
+}
+
 type ReactionAssociation struct {
 	ImageURL        string           `json:"imageUrl"`
 	Shortcode       string           `json:"shortcode"`
