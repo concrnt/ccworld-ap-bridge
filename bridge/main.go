@@ -69,12 +69,20 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 		return core.Message{}, errors.New("note too long")
 	}
 
+	contentWithImage := content
+	for _, attachment := range object.Attachment {
+		if attachment.Type == "Document" {
+			contentWithImage += "\n\n![image](" + attachment.URL + ")"
+		}
+	}
+
 	if object.Sensitive {
 		summary := "CW"
 		if object.Summary != "" {
 			summary = object.Summary
 		}
 		content = "<details>\n<summary>" + summary + "</summary>\n" + content + "\n</details>"
+		contentWithImage = "<details>\n<summary>" + summary + "</summary>\n" + contentWithImage + "\n</details>"
 	}
 
 	username := person.Name
@@ -93,7 +101,7 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 		media := []world.Media{}
 		for _, attachment := range object.Attachment {
 			flag := ""
-			if attachment.Sensitive {
+			if attachment.Sensitive || object.Sensitive {
 				flag = "sensitive"
 			}
 			media = append(media, world.Media{
@@ -166,12 +174,6 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 
 	} else {
 
-		for _, attachment := range object.Attachment {
-			if attachment.Type == "Document" {
-				content += "\n\n![image](" + attachment.URL + ")"
-			}
-		}
-
 		var ReplyToMessageID string
 		var ReplyToMessageAuthor string
 
@@ -198,7 +200,7 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 				Type:   "message",
 				Schema: world.ReplyMessageSchema,
 				Body: world.ReplyMessage{
-					Body: content,
+					Body: contentWithImage,
 					ProfileOverride: &world.ProfileOverride{
 						Username:    username,
 						Avatar:      person.Icon.URL,
