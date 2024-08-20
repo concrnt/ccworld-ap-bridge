@@ -355,29 +355,26 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like FetchPerson")
 		}
 
-		//var obj association.SignedObject
-		var doc core.AssociationDocument[world.ReactionAssociation] // ReactionはLikeを包含する
-
 		username := person.Name
 		if len(username) == 0 {
 			username = person.PreferredUsername
 		}
 
+		var tag *types.Tag
 		tags, err := types.ParseTags(object.Tag)
-		if err != nil {
-			span.RecordError(err)
-			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like ParseTags")
+		if err == nil {
+			tag = &tags[0]
 		}
-		tag := tags[0]
 
-		if (object.Tag == nil) || (tag.Name[0] != ':') {
-			doc = core.AssociationDocument[world.ReactionAssociation]{
-				DocumentBase: core.DocumentBase[world.ReactionAssociation]{
+		var document []byte
+		if (tag == nil) || (tag.Name[0] != ':') {
+			doc := core.AssociationDocument[world.LikeAssociation]{
+				DocumentBase: core.DocumentBase[world.LikeAssociation]{
 					Signer: s.config.ProxyCCID,
 					Owner:  targetMsg.Author,
 					Type:   "association",
 					Schema: world.LikeAssociationSchema,
-					Body: world.ReactionAssociation{
+					Body: world.LikeAssociation{
 						ProfileOverride: &world.ProfileOverride{
 							Username:    username,
 							Avatar:      person.Icon.URL,
@@ -392,8 +389,13 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 				},
 				Target: targetID,
 			}
+			document, err = json.Marshal(doc)
+			if err != nil {
+				span.RecordError(err)
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like Marshal")
+			}
 		} else {
-			doc = core.AssociationDocument[world.ReactionAssociation]{
+			doc := core.AssociationDocument[world.ReactionAssociation]{
 				DocumentBase: core.DocumentBase[world.ReactionAssociation]{
 					Signer: s.config.ProxyCCID,
 					Owner:  targetMsg.Author,
@@ -417,12 +419,11 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 				Target:  targetID,
 				Variant: tag.Icon.URL,
 			}
-		}
-
-		document, err := json.Marshal(doc)
-		if err != nil {
-			span.RecordError(err)
-			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like Marshal")
+			document, err = json.Marshal(doc)
+			if err != nil {
+				span.RecordError(err)
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like Marshal")
+			}
 		}
 
 		signatureBytes, err := core.SignBytes(document, s.config.ProxyPriv)
