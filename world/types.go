@@ -31,6 +31,7 @@ type Media struct {
 	MediaType    string `json:"mediaType"`
 	ThumbnailURL string `json:"thumbnailURL,omitempty"`
 	Blurhash     string `json:"blurhash,omitempty"`
+	Flag         string `json:"flag,omitempty"`
 }
 
 type MediaMessage struct {

@@ -119,6 +119,7 @@ type Attachment struct {
 	Type      string `json:"type,omitempty"`
 	MediaType string `json:"mediaType,omitempty"`
 	URL       string `json:"url,omitempty"`
+	Sensitive bool   `json:"sensitive,omitempty"`
 }
 
 // Tag is a struct for an ActivityPub tag.

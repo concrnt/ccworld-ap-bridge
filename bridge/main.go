@@ -92,9 +92,14 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 
 		media := []world.Media{}
 		for _, attachment := range object.Attachment {
+			flag := ""
+			if attachment.Sensitive {
+				flag = "sensitive"
+			}
 			media = append(media, world.Media{
 				MediaURL:  attachment.URL,
 				MediaType: attachment.MediaType,
+				Flag:      flag,
 			})
 		}
 

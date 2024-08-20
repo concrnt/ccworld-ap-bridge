@@ -46,6 +46,9 @@ jobs:
         uses: docker/metadata-action@v4
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable=${{ !contains(env.TAG, 'beta') }}
+            type=semver,pattern={{raw}}
 
       - name: Build and push Docker image
         id: build-and-push
