@@ -148,21 +148,19 @@ func (w *Worker) StartMessageWorker() {
 							if ctx.Err() != nil {
 								delete(workers, publisherUserID)
 								delete(states, publisherUserID)
-								continue
+								return
 							}
 							if err != nil {
 								log.Printf("worker/message/%v pubsub.ReceiveMessage %v", publisherUserID, err)
 								delete(workers, publisherUserID)
 								delete(states, publisherUserID)
-								continue
+								return
 							}
 
 							var streamEvent core.Event
 							err = json.Unmarshal([]byte(pubsubMsg.Payload), &streamEvent)
 							if err != nil {
 								log.Printf("worker/message/%v json.Unmarshal streamEvent %v", publisherUserID, err)
-								delete(workers, publisherUserID)
-								delete(states, publisherUserID)
 								continue
 							}
 
@@ -170,8 +168,6 @@ func (w *Worker) StartMessageWorker() {
 							err = json.Unmarshal([]byte(streamEvent.Document), &document)
 							if err != nil {
 								log.Printf("worker/message/%v json.Unmarshal document %v", publisherUserID, err)
-								delete(workers, publisherUserID)
-								delete(states, publisherUserID)
 								continue
 							}
 
