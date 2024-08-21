@@ -69,6 +69,7 @@ type ApObject struct {
 	Type              string           `json:"type,omitempty"`
 	ID                string           `json:"id,omitempty"`
 	To                any              `json:"to,omitempty"`
+	CC                any              `json:"cc,omitempty"`
 	Tag               any              `json:"tag,omitempty"`
 	Attachment        []Attachment     `json:"attachment,omitempty"`
 	InReplyTo         string           `json:"inReplyTo,omitempty"`

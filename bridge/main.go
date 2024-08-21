@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -95,6 +97,105 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 		date = time.Now()
 	}
 
+	to := []string{}
+	toStr, ok := object.To.(string)
+	if ok {
+		to = append(to, toStr)
+	} else {
+		arr, ok := object.To.([]any)
+		if !ok {
+			return core.Message{}, errors.New("invalid to")
+		}
+		for _, v := range arr {
+			vStr, ok := v.(string)
+			if !ok {
+				fmt.Println("invalid to", v)
+				continue
+			}
+			to = append(to, vStr)
+		}
+	}
+
+	cc := []string{}
+	ccStr, ok := object.CC.(string)
+	if ok {
+		cc = append(cc, ccStr)
+	} else {
+		arr, ok := object.CC.([]any)
+		if !ok {
+			return core.Message{}, errors.New("invalid cc")
+		}
+		for _, v := range arr {
+			vStr, ok := v.(string)
+			if !ok {
+				fmt.Println("invalid cc", v)
+				continue
+			}
+			cc = append(cc, vStr)
+		}
+	}
+
+	visibility := "unknown"
+	participants := []string{}
+
+	if slices.Contains(to, "https://www.w3.org/ns/activitystreams#Public") || slices.Contains(cc, "https://www.w3.org/ns/activitystreams#Public") {
+		visibility = "public"
+		goto CHECK_VISIBILITY
+	}
+
+	for _, v := range to {
+		if strings.HasSuffix(v, "/followers") {
+			visibility = "followers"
+
+			follows, err := s.store.GetFollowsByPublisher(ctx, object.AttributedTo)
+			if err != nil {
+				fmt.Println("followers not found")
+				continue
+			}
+			for _, follow := range follows {
+				entity, err := s.store.GetEntityByID(ctx, follow.SubscriberUserID)
+				if err != nil {
+					fmt.Println("entity not found", err)
+					continue
+				}
+				participants = append(participants, entity.CCID)
+			}
+		}
+
+		if strings.HasPrefix(v, "https://"+s.config.FQDN+"/ap/acct/") {
+			visibility = "direct"
+			entity, err := s.store.GetEntityByID(ctx, strings.TrimPrefix(v, "https://"+s.config.FQDN+"/ap/acct/"))
+			if err != nil {
+				fmt.Println("entity not found")
+				continue
+			}
+			participants = append(participants, entity.CCID)
+			break
+		}
+	}
+CHECK_VISIBILITY:
+
+	if visibility == "unknown" {
+		return core.Message{}, errors.New("invalid to")
+	} else if visibility != "public" && len(participants) == 0 {
+		return core.Message{}, errors.New("invalid to")
+	}
+
+	var policy = ""
+	var policyParams = ""
+	if len(participants) > 0 {
+		policy = "https://policy.concrnt.world/m/whisper.json"
+		params := world.WhisperPolicy{
+			Participants: participants,
+		}
+		policyParamsBytes, err := json.Marshal(params)
+		if err != nil {
+			return core.Message{}, errors.Wrap(err, "json marshal error")
+		}
+
+		policyParams = string(policyParamsBytes)
+	}
+
 	var document []byte
 	if object.InReplyTo == "" {
 
@@ -132,8 +233,11 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 						"apActor":          person.URL,
 						"apObjectRef":      object.ID,
 						"apPublisherInbox": person.Inbox,
+						"visibility":       visibility,
 					},
-					SignedAt: date,
+					SignedAt:     date,
+					Policy:       policy,
+					PolicyParams: policyParams,
 				},
 				Timelines: destStreams,
 			}
@@ -161,8 +265,11 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 						"apActor":          person.URL,
 						"apObjectRef":      object.ID,
 						"apPublisherInbox": person.Inbox,
+						"visibility":       visibility,
 					},
-					SignedAt: date,
+					SignedAt:     date,
+					Policy:       policy,
+					PolicyParams: policyParams,
 				},
 				Timelines: destStreams,
 			}
@@ -215,8 +322,11 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 					"apActor":          person.URL,
 					"apObjectRef":      object.ID,
 					"apPublisherInbox": person.Inbox,
+					"visibility":       visibility,
 				},
-				SignedAt: date,
+				SignedAt:     date,
+				Policy:       policy,
+				PolicyParams: policyParams,
 			},
 			Timelines: destStreams,
 		}

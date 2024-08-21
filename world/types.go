@@ -78,3 +78,7 @@ type RerouteMessage struct {
 	Emojis               *map[string]Emoji `json:"emojis"`
 	ProfileOverride      *ProfileOverride  `json:"profileOverride"`
 }
+
+type WhisperPolicy struct {
+	Participants []string `json:"participants"`
+}
