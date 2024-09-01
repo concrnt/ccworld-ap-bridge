@@ -405,7 +405,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 	// remove markdown notation
 	text = imagePattern.ReplaceAllString(text, "")
 
-	if len(*document.Body.Emojis) > 0 {
+	if document.Body.Emojis != nil {
 		for k, v := range *document.Body.Emojis {
 			//imageURL, ok := v.(map[string]interface{})["imageURL"].(string)
 			emoji := types.Tag{
