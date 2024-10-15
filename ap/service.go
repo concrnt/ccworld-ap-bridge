@@ -22,6 +22,7 @@ import (
 	"github.com/totegamma/concurrent/client"
 	"github.com/totegamma/concurrent/core"
 	"github.com/totegamma/concurrent/x/jwt"
+	commitStore "github.com/totegamma/concurrent/x/store"
 )
 
 type Service struct {
@@ -434,9 +435,20 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 
 		signature := hex.EncodeToString(signatureBytes)
 
+		opt := commitStore.CommitOption{
+			IsEphemeral: true,
+		}
+
+		option, err := json.Marshal(opt)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like Marshal")
+		}
+
 		commitObj := core.Commit{
 			Document:  string(document),
 			Signature: string(signature),
+			Option:    string(option),
 		}
 
 		commit, err := json.Marshal(commitObj)
@@ -703,9 +715,20 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 
 		signature := hex.EncodeToString(signatureBytes)
 
+		opt := commitStore.CommitOption{
+			IsEphemeral: true,
+		}
+
+		option, err := json.Marshal(opt)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/announce Marshal")
+		}
+
 		commitObj := core.Commit{
 			Document:  string(document),
 			Signature: string(signature),
+			Option:    string(option),
 		}
 
 		commit, err := json.Marshal(commitObj)
@@ -836,9 +859,20 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 
 			signature := hex.EncodeToString(signatureBytes)
 
+			opt := commitStore.CommitOption{
+				IsEphemeral: true,
+			}
+
+			option, err := json.Marshal(opt)
+			if err != nil {
+				span.RecordError(err)
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/undo/like Marshal")
+			}
+
 			commitObj := core.Commit{
 				Document:  string(document),
 				Signature: string(signature),
+				Option:    string(option),
 			}
 
 			commit, err := json.Marshal(commitObj)
@@ -906,9 +940,20 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 
 		signature := hex.EncodeToString(signatureBytes)
 
+		opt := commitStore.CommitOption{
+			IsEphemeral: true,
+		}
+
+		option, err := json.Marshal(opt)
+		if err != nil {
+			span.RecordError(err)
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/delete Marshal")
+		}
+
 		commitObj := core.Commit{
 			Document:  string(document),
 			Signature: string(signature),
+			Option:    string(option),
 		}
 
 		commit, err := json.Marshal(commitObj)

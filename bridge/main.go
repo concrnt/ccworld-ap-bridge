@@ -19,6 +19,7 @@ import (
 	"github.com/concrnt/ccworld-ap-bridge/world"
 	"github.com/totegamma/concurrent/client"
 	"github.com/totegamma/concurrent/core"
+	commitStore "github.com/totegamma/concurrent/x/store"
 )
 
 var tracer = otel.Tracer("bridge")
@@ -343,9 +344,19 @@ CHECK_VISIBILITY:
 
 	signature := hex.EncodeToString(signatureBytes)
 
+	opt := commitStore.CommitOption{
+		IsEphemeral: true,
+	}
+
+	option, err := json.Marshal(opt)
+	if err != nil {
+		return core.Message{}, errors.Wrap(err, "json marshal error")
+	}
+
 	commitObj := core.Commit{
 		Document:  string(document),
 		Signature: string(signature),
+		Option:    string(option),
 	}
 
 	commit, err := json.Marshal(commitObj)
