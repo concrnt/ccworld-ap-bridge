@@ -89,7 +89,6 @@ type ApObject struct {
 	Summary           string           `json:"summary,omitempty"`
 	URL               string           `json:"url,omitempty"`
 	Icon              Icon             `json:"icon,omitempty"`
-	Image             Icon             `json:"image,omitempty"`
 	PublicKey         *Key             `json:"publicKey,omitempty"`
 	Object            any              `json:"object,omitempty"`
 	Sensitive         bool             `json:"sensitive,omitempty"`
