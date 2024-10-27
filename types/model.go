@@ -74,6 +74,7 @@ type ApObject struct {
 	Attachment        []Attachment     `json:"attachment,omitempty"`
 	InReplyTo         string           `json:"inReplyTo,omitempty"`
 	Content           string           `json:"content,omitempty"`
+	MisskeyContent    string           `json:"_misskey_content,omitempty"`
 	Published         string           `json:"published,omitempty"`
 	AttributedTo      string           `json:"attributedTo,omitempty"`
 	QuoteURL          string           `json:"quoteUrl,omitempty"`

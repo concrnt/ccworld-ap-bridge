@@ -10,6 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gomarkdown/markdown"
+	"github.com/gomarkdown/markdown/html"
+	"github.com/gomarkdown/markdown/parser"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 
@@ -453,19 +456,33 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 		attachments = append(attachments, attachment)
 	}
 
+	// convert markdown to html
+	extensions := parser.CommonExtensions | parser.NoEmptyLineBeforeBlock
+	p := parser.NewWithExtensions(extensions)
+	doc := p.Parse([]byte(text))
+
+	htmlFlags := html.CommonFlags
+	opts := html.RendererOptions{Flags: htmlFlags}
+	renderer := html.NewRenderer(opts)
+
+	htmlTextBytes := markdown.Render(doc, renderer)
+	htmlText := string(htmlTextBytes)
+	htmlText = strings.Trim(htmlText, "\n")
+
 	if document.Schema == world.MarkdownMessageSchema || document.Schema == world.MediaMessageSchema { // Note
 
 		return types.ApObject{
-			Context:      "https://www.w3.org/ns/activitystreams",
-			Type:         "Note",
-			ID:           "https://" + s.config.FQDN + "/ap/note/" + message.ID,
-			AttributedTo: "https://" + s.config.FQDN + "/ap/acct/" + authorEntity.ID,
-			Summary:      summary,
-			Content:      text,
-			Published:    document.SignedAt.Format(time.RFC3339),
-			To:           []string{"https://www.w3.org/ns/activitystreams#Public"},
-			Tag:          emojis,
-			Attachment:   attachments,
+			Context:        "https://www.w3.org/ns/activitystreams",
+			Type:           "Note",
+			ID:             "https://" + s.config.FQDN + "/ap/note/" + message.ID,
+			AttributedTo:   "https://" + s.config.FQDN + "/ap/acct/" + authorEntity.ID,
+			Summary:        summary,
+			Content:        htmlText,
+			MisskeyContent: text,
+			Published:      document.SignedAt.Format(time.RFC3339),
+			To:             []string{"https://www.w3.org/ns/activitystreams#Public"},
+			Tag:            emojis,
+			Attachment:     attachments,
 		}, nil
 
 	} else if document.Schema == world.ReplyMessageSchema { // Reply
@@ -505,13 +522,14 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 		}
 
 		return types.ApObject{
-			Context:      "https://www.w3.org/ns/activitystreams",
-			Type:         "Note",
-			ID:           "https://" + s.config.FQDN + "/ap/note/" + message.ID,
-			AttributedTo: "https://" + s.config.FQDN + "/ap/acct/" + authorEntity.ID,
-			Content:      text,
-			InReplyTo:    ref,
-			To:           []string{"https://www.w3.org/ns/activitystreams#Public"},
+			Context:        "https://www.w3.org/ns/activitystreams",
+			Type:           "Note",
+			ID:             "https://" + s.config.FQDN + "/ap/note/" + message.ID,
+			AttributedTo:   "https://" + s.config.FQDN + "/ap/acct/" + authorEntity.ID,
+			Content:        htmlText,
+			MisskeyContent: text,
+			InReplyTo:      ref,
+			To:             []string{"https://www.w3.org/ns/activitystreams#Public"},
 		}, nil
 
 	} else if document.Schema == world.RerouteMessageSchema { // Boost or Quote
@@ -560,13 +578,14 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 		}
 
 		return types.ApObject{
-			Context:      "https://www.w3.org/ns/activitystreams",
-			Type:         "Note",
-			ID:           "https://" + s.config.FQDN + "/ap/note/" + message.ID,
-			AttributedTo: "https://" + s.config.FQDN + "/ap/acct/" + authorEntity.ID,
-			Content:      text,
-			QuoteURL:     ref,
-			To:           []string{"https://www.w3.org/ns/activitystreams#Public"},
+			Context:        "https://www.w3.org/ns/activitystreams",
+			Type:           "Note",
+			ID:             "https://" + s.config.FQDN + "/ap/note/" + message.ID,
+			AttributedTo:   "https://" + s.config.FQDN + "/ap/acct/" + authorEntity.ID,
+			Content:        htmlText,
+			MisskeyContent: text,
+			QuoteURL:       ref,
+			To:             []string{"https://www.w3.org/ns/activitystreams#Public"},
 		}, nil
 	} else {
 		return types.ApObject{}, errors.New("invalid schema")
