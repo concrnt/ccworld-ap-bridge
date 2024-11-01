@@ -58,6 +58,11 @@ func main() {
 	log.Print("ConcurrentWorld Activitypub Bridge ", version, " starting...")
 	log.Print("ApConfig loaded! Proxy: ", config.ApConfig.ProxyCCID)
 
+	config.NodeInfo.Version = "2.0"
+	config.NodeInfo.Software.Name = "ccworld-ap-bridge"
+	config.NodeInfo.Software.Version = version
+	config.NodeInfo.Protocols = []string{"activitypub"}
+
 	e.HidePort = true
 	e.HideBanner = true
 
