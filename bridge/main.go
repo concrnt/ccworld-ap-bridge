@@ -525,6 +525,10 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 		replyToActor, ok := replyMeta["apActor"].(string)
 		if ok {
 			CC = []string{replyToActor}
+			emojis = append(emojis, types.Tag{
+				Type: "Mention",
+				Href: replyToActor,
+			})
 		}
 
 		return types.ApObject{
