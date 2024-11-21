@@ -530,6 +530,8 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 			MisskeyContent: text,
 			InReplyTo:      ref,
 			To:             []string{"https://www.w3.org/ns/activitystreams#Public"},
+			Tag:            emojis,
+			Attachment:     attachments,
 		}, nil
 
 	} else if document.Schema == world.RerouteMessageSchema { // Boost or Quote
