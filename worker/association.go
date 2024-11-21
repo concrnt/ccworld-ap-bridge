@@ -183,80 +183,83 @@ func (w *Worker) StartAssociationWorker() {
 						log.Printf("worker/association/reaction PostToInbox: %v", err)
 						continue
 					}
-				case world.ReplyAssociationSchema:
-					var replyDoc core.AssociationDocument[world.ReplyAssociation]
-					err = json.Unmarshal([]byte(association.Document), &replyDoc)
-					if err != nil {
-						log.Printf("worker/association/reply unmarshal replyDoc: %v", err)
-						continue
-					}
+					/*
+						case world.ReplyAssociationSchema:
+							var replyDoc core.AssociationDocument[world.ReplyAssociation]
+							err = json.Unmarshal([]byte(association.Document), &replyDoc)
+							if err != nil {
+								log.Printf("worker/association/reply unmarshal replyDoc: %v", err)
+								continue
+							}
 
-					token, err := createToken(w.config.FQDN, w.config.ProxyCCID, w.config.ProxyPriv)
-					if err != nil {
-						log.Printf("worker/association/reply createToken %v", err)
-						continue
-					}
+							token, err := createToken(w.config.FQDN, w.config.ProxyCCID, w.config.ProxyPriv)
+							if err != nil {
+								log.Printf("worker/association/reply createToken %v", err)
+								continue
+							}
 
-					reply, err := w.client.GetMessage(ctx, w.config.FQDN, replyDoc.Body.MessageID, &client.Options{
-						AuthToken: token,
-					}) // TODO: handle remote
-					if err != nil {
-						log.Printf("worker/association/reply GetMessage: %v", err)
-						continue
-					}
+							reply, err := w.client.GetMessage(ctx, w.config.FQDN, replyDoc.Body.MessageID, &client.Options{
+								AuthToken: token,
+							}) // TODO: handle remote
+							if err != nil {
+								log.Printf("worker/association/reply GetMessage: %v", err)
+								continue
+							}
 
-					var replyMessage core.MessageDocument[world.ReplyMessage]
-					err = json.Unmarshal([]byte(reply.Document), &replyMessage)
-					if err != nil {
-						log.Printf("worker/association/reply unmarshal replyMessage: %v", err)
-						continue
-					}
+							var replyMessage core.MessageDocument[world.ReplyMessage]
+							err = json.Unmarshal([]byte(reply.Document), &replyMessage)
+							if err != nil {
+								log.Printf("worker/association/reply unmarshal replyMessage: %v", err)
+								continue
+							}
 
-					create := types.ApObject{
-						Context: []string{"https://www.w3.org/ns/activitystreams"},
-						Type:    "Create",
-						ID:      "https://" + w.config.FQDN + "/ap/note/" + replyDoc.Body.MessageID + "/activity",
-						Actor:   "https://" + w.config.FQDN + "/ap/acct/" + assauthor.ID,
-						Object: types.ApObject{
-							Type:         "Note",
-							ID:           "https://" + w.config.FQDN + "/ap/note/" + replyDoc.Body.MessageID,
-							AttributedTo: "https://" + w.config.FQDN + "/ap/acct/" + assauthor.ID,
-							Content:      replyMessage.Body.Body,
-							InReplyTo:    ref,
-							To:           []string{"https://www.w3.org/ns/activitystreams#Public"},
-						},
-					}
+							create := types.ApObject{
+								Context: []string{"https://www.w3.org/ns/activitystreams"},
+								Type:    "Create",
+								ID:      "https://" + w.config.FQDN + "/ap/note/" + replyDoc.Body.MessageID + "/activity",
+								Actor:   "https://" + w.config.FQDN + "/ap/acct/" + assauthor.ID,
+								Object: types.ApObject{
+									Type:         "Note",
+									ID:           "https://" + w.config.FQDN + "/ap/note/" + replyDoc.Body.MessageID,
+									AttributedTo: "https://" + w.config.FQDN + "/ap/acct/" + assauthor.ID,
+									Content:      replyMessage.Body.Body,
+									InReplyTo:    ref,
+									To:           []string{"https://www.w3.org/ns/activitystreams#Public"},
+								},
+							}
 
-					err = w.apclient.PostToInbox(ctx, dest, create, assauthor)
-					if err != nil {
-						log.Printf("worker/association/reply PostToInbox: %v", err)
-						continue
-					}
+							err = w.apclient.PostToInbox(ctx, dest, create, assauthor)
+							if err != nil {
+								log.Printf("worker/association/reply PostToInbox: %v", err)
+								continue
+							}
+					*/
 
-				case world.RerouteAssociationSchema:
-					var rerouteDoc core.AssociationDocument[world.RerouteAssociation]
-					err = json.Unmarshal([]byte(association.Document), &rerouteDoc)
-					if err != nil {
-						log.Printf("worker/association/reroute unmarshal rerouteDoc: %v", err)
-						continue
-					}
+					/*
+						case world.RerouteAssociationSchema:
+							var rerouteDoc core.AssociationDocument[world.RerouteAssociation]
+							err = json.Unmarshal([]byte(association.Document), &rerouteDoc)
+							if err != nil {
+								log.Printf("worker/association/reroute unmarshal rerouteDoc: %v", err)
+								continue
+							}
 
-					announce := types.ApObject{
-						Context: []string{"https://www.w3.org/ns/activitystreams"},
-						Type:    "Announce",
-						ID:      "https://" + w.config.FQDN + "/ap/note/" + rerouteDoc.Body.MessageID,
-						Actor:   "https://" + w.config.FQDN + "/ap/acct/" + assauthor.ID,
-						Content: "",
-						Object:  ref,
-						To:      []string{"https://www.w3.org/ns/activitystreams#Public"},
-					}
-					err = w.apclient.PostToInbox(ctx, dest, announce, assauthor)
-					if err != nil {
-						log.Printf("worker/association/reroute PostToInbox: %v", err)
-						continue
-					}
+							announce := types.ApObject{
+								Context: []string{"https://www.w3.org/ns/activitystreams"},
+								Type:    "Announce",
+								ID:      "https://" + w.config.FQDN + "/ap/note/" + rerouteDoc.Body.MessageID,
+								Actor:   "https://" + w.config.FQDN + "/ap/acct/" + assauthor.ID,
+								Content: "",
+								Object:  ref,
+								To:      []string{"https://www.w3.org/ns/activitystreams#Public"},
+							}
+							err = w.apclient.PostToInbox(ctx, dest, announce, assauthor)
+							if err != nil {
+								log.Printf("worker/association/reroute PostToInbox: %v", err)
+								continue
+							}
+					*/
 				}
-
 			}
 
 		case "delete":
