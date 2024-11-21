@@ -521,6 +521,12 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 			ref = "https://" + replyAuthor.Domain + "/ap/note/" + replyDocument.Body.ReplyToMessageID
 		}
 
+		CC := []string{}
+		replyToActor, ok := replyMeta["apActor"].(string)
+		if ok {
+			CC = []string{replyToActor}
+		}
+
 		return types.ApObject{
 			Context:        "https://www.w3.org/ns/activitystreams",
 			Type:           "Note",
@@ -530,6 +536,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 			MisskeyContent: text,
 			InReplyTo:      ref,
 			To:             []string{"https://www.w3.org/ns/activitystreams#Public"},
+			CC:             CC,
 			Tag:            emojis,
 			Attachment:     attachments,
 		}, nil
