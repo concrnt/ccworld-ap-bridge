@@ -151,6 +151,10 @@ func main() {
 
 	storeService := store.NewStore(db)
 	client := client.NewClient()
+	client.SetUserAgent("CCWorld-AP-Bridge", version)
+	if config.Server.ApiAddr != "" {
+		client.RegisterHostRemap(config.ApConfig.FQDN, config.Server.ApiAddr, false)
+	}
 	apclient := apclient.NewApClient(mc, storeService, config.ApConfig)
 
 	bridge := bridge.NewService(storeService, client, apclient, config.ApConfig)
