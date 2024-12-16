@@ -55,7 +55,7 @@ func main() {
 	}
 	config.Load(ConfPath)
 
-	log.Print("ConcurrentWorld Activitypub Bridge ", version, " starting...")
+	log.Print("ConcrntWorld Activitypub Bridge ", version, " starting...")
 	log.Print("ApConfig loaded! Proxy: ", config.ApConfig.ProxyCCID)
 
 	config.NodeInfo.Version = "2.0"
