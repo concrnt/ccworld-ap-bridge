@@ -119,9 +119,6 @@ func main() {
 	}
 
 	mc := memcache.New(config.Server.MemcachedAddr)
-	if err != nil {
-		panic("failed to connect memcached")
-	}
 	defer mc.Close()
 
 	// Migrate the schema
