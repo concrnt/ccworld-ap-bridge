@@ -15,7 +15,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/redis/go-redis/extra/redisotel/v9 v9.0.5
 	github.com/redis/go-redis/v9 v9.5.3
-	github.com/totegamma/concurrent v1.4.1
+	github.com/totegamma/concurrent v1.6.2
 	github.com/totegamma/httpsig v1.1.1
 	go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho v0.43.0
 	go.opentelemetry.io/otel v1.27.0
