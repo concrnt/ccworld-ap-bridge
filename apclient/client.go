@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	UserAgent = "ConcurrentWorker/1.0"
+	UserAgent = "ConcrntWorldApBridge/1.0 (Concrnt)"
 )
 
 var tracer = otel.Tracer("apclient")
