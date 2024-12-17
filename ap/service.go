@@ -389,6 +389,9 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 					SignedAt: time.Now(),
 				},
 				Target: targetID,
+				Timelines: []string{
+					world.UserNotifyStream + "@" + targetMsg.Author,
+				},
 			}
 			document, err = json.Marshal(doc)
 			if err != nil {
@@ -419,6 +422,9 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 				},
 				Target:  targetID,
 				Variant: tag.Icon.URL,
+				Timelines: []string{
+					world.UserNotifyStream + "@" + targetMsg.Author,
+				},
 			}
 			document, err = json.Marshal(doc)
 			if err != nil {
