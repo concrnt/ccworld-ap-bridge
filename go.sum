@@ -496,8 +496,8 @@ github.com/tendermint/go-amino v0.16.0 h1:GyhmgQKvqF82e2oZeuMSp9JTN0N09emoSZlb2l
 github.com/tendermint/go-amino v0.16.0/go.mod h1:TQU0M1i/ImAo+tYpZi73AU3V/dKeCoMC9Sphe2ZwGME=
 github.com/tidwall/btree v1.7.0 h1:L1fkJH/AuEh5zBnnBbmTwQ5Lt+bRJ5A8EWecslvo9iI=
 github.com/tidwall/btree v1.7.0/go.mod h1:twD9XRA5jj9VUQGELzDO4HPQTNJsoWWfYEL+EUQ2cKY=
-github.com/totegamma/concurrent v1.6.2 h1:zbBluQEi0prqxN7MUNVvw8zd+3wFoF3o/6hOMFecoTw=
-github.com/totegamma/concurrent v1.6.2/go.mod h1:/S8SocUGVpM8Cc+OME9eY084mw4ZLnNwuFFdQqT1tJo=
+github.com/totegamma/concurrent v1.6.3 h1:Hfl9Zm5oE17xe8/IDWIBfpnf346RWX+rIG8YG+pU3Fw=
+github.com/totegamma/concurrent v1.6.3/go.mod h1:/S8SocUGVpM8Cc+OME9eY084mw4ZLnNwuFFdQqT1tJo=
 github.com/totegamma/httpsig v1.1.1 h1:GKwQnUXJ17mcicR+z0AoOwjgdZwYQKXueyRfNKrZUnY=
 github.com/totegamma/httpsig v1.1.1/go.mod h1:tySNq5FAruX0lRLY6Z/4oD45uNlbRHxHXVvt9wD4Iz4=
 github.com/tv42/httpunix v0.0.0-20150427012821-b75d8614f926/go.mod h1:9ESjWnEqriFuLhtthL60Sar/7RFoluCcXsuvEwTV5KM=
