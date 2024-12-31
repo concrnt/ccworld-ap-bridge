@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"slices"
 	"strconv"
 	"time"
 
@@ -33,21 +34,76 @@ func createToken(domain, ccid, priv string) (string, error) {
 func (w *Worker) StartAssociationWorker() {
 
 	ctx := context.Background()
-	notificationStream := world.UserNotifyStream + "@" + w.config.ProxyCCID
-	timeline, err := w.client.GetTimeline(ctx, w.config.FQDN, notificationStream, nil)
-	if err != nil {
-		log.Printf("worker/association GetTimeline: %v", err)
-		return
-	}
-
-	normalized := timeline.ID + "@" + w.config.FQDN
-
 	pubsub := w.rdb.Subscribe(ctx)
-	err = pubsub.Subscribe(ctx, normalized)
-	if err != nil {
-		log.Printf("worker/association Subscribe: %v", err)
-		panic(err)
-	}
+
+	var lastEntities []string
+	tlDict := make(map[string]string)
+
+	go func() {
+		for {
+			entities, err := w.store.GetAllEntities(ctx)
+			if err != nil {
+				time.Sleep(10 * time.Second)
+				log.Printf("worker/association GetAllEntities: %v", err)
+				continue
+			}
+
+			if len(entities) == 0 {
+				time.Sleep(10 * time.Second)
+				continue
+			}
+
+			if len(lastEntities) == len(entities) {
+				time.Sleep(10 * time.Second)
+				continue
+			}
+
+			same := true
+			for _, entity := range entities {
+				if !slices.Contains(lastEntities, entity.CCID) {
+					same = false
+					break
+				}
+			}
+
+			if same {
+				time.Sleep(10 * time.Second)
+				continue
+			}
+
+			var listeners []string
+			for _, entity := range entities {
+
+				if _, ok := tlDict[entity.CCID]; ok {
+					listeners = append(listeners, tlDict[entity.CCID])
+				} else {
+					associationStream := world.UserAssocStream + "@" + entity.CCID
+					log.Printf("worker/association lookup %v", associationStream)
+					timeline, err := w.client.GetTimeline(ctx, w.config.FQDN, associationStream, nil)
+					if err != nil {
+						log.Printf("worker/association GetTimeline: %v", err)
+						continue
+					}
+
+					normalized := timeline.ID + "@" + w.config.FQDN
+
+					listeners = append(listeners, normalized)
+					tlDict[entity.CCID] = normalized
+				}
+				lastEntities = append(lastEntities, entity.CCID)
+			}
+
+			err = pubsub.Subscribe(ctx, listeners...)
+			if err != nil {
+				log.Printf("worker/association Subscribe: %v", err)
+				time.Sleep(10 * time.Second)
+				continue
+			}
+			log.Println("worker/association subscribe success: ", listeners)
+
+			time.Sleep(10 * time.Second)
+		}
+	}()
 
 	for {
 		pubsubMsg, err := pubsub.ReceiveMessage(ctx)

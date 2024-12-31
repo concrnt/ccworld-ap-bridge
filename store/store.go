@@ -41,6 +41,15 @@ func (s Store) UpsertUserSettings(ctx context.Context, settings types.ApUserSett
 	return s.db.WithContext(ctx).Save(&settings).Error
 }
 
+func (s Store) GetAllEntities(ctx context.Context) ([]types.ApEntity, error) {
+	ctx, span := tracer.Start(ctx, "StoreGetAllEntities")
+	defer span.End()
+
+	var entities []types.ApEntity
+	err := s.db.WithContext(ctx).Find(&entities).Error
+	return entities, err
+}
+
 // GetEntityByID returns an entity by ID.
 func (s Store) GetEntityByID(ctx context.Context, id string) (types.ApEntity, error) {
 	ctx, span := tracer.Start(ctx, "StoreGetEntityByID")
