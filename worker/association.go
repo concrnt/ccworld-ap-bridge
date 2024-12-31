@@ -256,13 +256,19 @@ func (w *Worker) StartAssociationWorker() {
 					continue
 				}
 
-				token, err := createToken(w.config.FQDN, w.config.ProxyCCID, w.config.ProxyPriv)
+				targetEntity, err := w.client.GetEntity(ctx, w.config.FQDN, association.Target, nil)
+				if err != nil {
+					log.Printf("worker/association/delete GetEntityByCCID: %v", err)
+					continue
+				}
+
+				token, err := createToken(targetEntity.Domain, w.config.ProxyCCID, w.config.ProxyPriv)
 				if err != nil {
 					log.Printf("worker/association/delete createToken %v", err)
 					continue
 				}
 
-				target, err := w.client.GetMessage(ctx, w.config.FQDN, association.Target, &client.Options{
+				target, err := w.client.GetMessage(ctx, targetEntity.Domain, association.Target, &client.Options{
 					AuthToken: token,
 				})
 				if err != nil {
