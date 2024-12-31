@@ -146,19 +146,25 @@ func (w *Worker) StartAssociationWorker() {
 					continue
 				}
 
-				assauthor, err := w.store.GetEntityByCCID(ctx, association.Author) // TODO: handle remote
+				assauthor, err := w.store.GetEntityByCCID(ctx, association.Author)
 				if err != nil {
 					log.Printf("worker/association GetEntityByCCID: %v", err)
 					continue
 				}
 
-				token, err := createToken(w.config.FQDN, w.config.ProxyCCID, w.config.ProxyPriv)
+				messageAuthor, err := w.client.GetEntity(ctx, w.config.FQDN, association.Owner, nil)
+				if err != nil {
+					log.Printf("worker/association GetEntity: %v", err)
+					continue
+				}
+
+				token, err := createToken(messageAuthor.Domain, w.config.ProxyCCID, w.config.ProxyPriv)
 				if err != nil {
 					log.Printf("worker/association createToken %v", err)
 					continue
 				}
 
-				msg, err := w.client.GetMessage(ctx, w.config.FQDN, association.Target, &client.Options{
+				msg, err := w.client.GetMessage(ctx, messageAuthor.Domain, association.Target, &client.Options{
 					AuthToken: token,
 				})
 				if err != nil {
