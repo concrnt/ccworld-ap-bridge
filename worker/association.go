@@ -256,7 +256,7 @@ func (w *Worker) StartAssociationWorker() {
 					continue
 				}
 
-				targetEntity, err := w.client.GetEntity(ctx, w.config.FQDN, association.Target, nil)
+				targetEntity, err := w.client.GetEntity(ctx, w.config.FQDN, association.Owner, nil)
 				if err != nil {
 					log.Printf("worker/association/delete GetEntityByCCID: %v", err)
 					continue
