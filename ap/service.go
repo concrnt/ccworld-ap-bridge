@@ -2,10 +2,13 @@ package ap
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"log"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -23,6 +26,7 @@ import (
 	"github.com/totegamma/concurrent/core"
 	"github.com/totegamma/concurrent/x/jwt"
 	commitStore "github.com/totegamma/concurrent/x/store"
+	"github.com/totegamma/httpsig"
 )
 
 type Service struct {
@@ -244,9 +248,73 @@ func (s *Service) Note(ctx context.Context, id string) (types.ApObject, error) {
 	return note, nil
 }
 
-func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId string) (types.ApObject, error) {
+func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId string, request *http.Request) (types.ApObject, error) {
 	ctx, span := tracer.Start(ctx, "Ap.Service.Inbox")
 	defer span.End()
+
+	verifier, err := httpsig.NewVerifier(request)
+	if err != nil {
+		fmt.Println("NewVerifier error")
+		span.RecordError(err)
+		return types.ApObject{}, errors.Wrap(err, "ap/service/inbox NewVerifier")
+	}
+
+	keyid := verifier.KeyId()
+	if keyid == "" {
+		fmt.Println("KeyId not found")
+		span.RecordError(err)
+		return types.ApObject{}, errors.New("ap/service/inbox KeyId not found")
+	}
+
+	var recipientEntity *types.ApEntity
+	if inboxId != "" {
+		recipients, err := s.store.GetEntityByID(ctx, inboxId)
+		if err != nil {
+			fmt.Println("GetEntityByID error:", err)
+			span.RecordError(err)
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox GetEntityByID")
+		}
+
+		recipientEntity = &recipients
+	}
+
+	requester, err := s.apclient.FetchPerson(ctx, keyid, recipientEntity)
+	if err != nil {
+		fmt.Println("FetchPerson error:", err)
+		span.RecordError(err)
+		return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/follow FetchPerson")
+	}
+
+	pubkey := requester.PublicKey
+	if pubkey == nil {
+		fmt.Println("PublicKey not found")
+		span.RecordError(err)
+		return types.ApObject{}, errors.New("ap/service/inbox PublicKey not found")
+	}
+	pemStr := pubkey.PublicKeyPem
+
+	pemBytes := []byte(pemStr)
+
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		fmt.Println("Decode error")
+		span.RecordError(err)
+		return types.ApObject{}, errors.New("ap/service/inbox Decode error")
+	}
+
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		fmt.Println("ParsePKIXPublicKey error:", err)
+		span.RecordError(err)
+		return types.ApObject{}, errors.Wrap(err, "ap/service/inbox ParsePKIXPublicKey")
+	}
+
+	err = verifier.Verify(pub, httpsig.RSA_SHA256)
+	if err != nil {
+		fmt.Println("Verify error:", err)
+		span.RecordError(err)
+		return types.ApObject{}, errors.Wrap(err, "ap/service/inbox Verify")
+	}
 
 	switch object.Type {
 	case "Follow":
@@ -268,7 +336,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/follow GetEntityByID")
 		}
 
-		requester, err := s.apclient.FetchPerson(ctx, object.Actor, entity)
+		requester, err := s.apclient.FetchPerson(ctx, object.Actor, &entity)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/follow FetchPerson")
@@ -357,7 +425,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like GetEntityByCCID")
 		}
 
-		person, err := s.apclient.FetchPerson(ctx, object.Actor, entity)
+		person, err := s.apclient.FetchPerson(ctx, object.Actor, &entity)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like FetchPerson")
@@ -544,7 +612,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 				return types.ApObject{}, nil
 			}
 
-			person, err := s.apclient.FetchPerson(ctx, object.Actor, rep)
+			person, err := s.apclient.FetchPerson(ctx, object.Actor, &rep)
 			if err != nil {
 				span.RecordError(err)
 				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/create FetchPerson")
@@ -633,7 +701,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			return types.ApObject{}, nil
 		}
 
-		person, err := s.apclient.FetchPerson(ctx, object.Actor, rep)
+		person, err := s.apclient.FetchPerson(ctx, object.Actor, &rep)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/announce FetchPerson")
@@ -659,7 +727,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			}
 
 			// save person
-			person, err := s.apclient.FetchPerson(ctx, note.AttributedTo, rep)
+			person, err := s.apclient.FetchPerson(ctx, note.AttributedTo, &rep)
 			if err != nil {
 				span.RecordError(err)
 				return types.ApObject{}, err

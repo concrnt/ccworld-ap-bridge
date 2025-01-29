@@ -1,6 +1,9 @@
 package ap
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"slices"
@@ -141,8 +144,17 @@ func (h Handler) Inbox(c echo.Context) error {
 	ctx, span := tracer.Start(c.Request().Context(), "HandlerAPInbox")
 	defer span.End()
 
+	bodyBytes, err := io.ReadAll(c.Request().Body)
+	defer c.Request().Body.Close()
+	if err != nil {
+		span.RecordError(err)
+		return c.String(http.StatusBadRequest, "Invalid request body")
+	}
+
+	c.Request().Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
 	var object types.ApObject
-	err := c.Bind(&object)
+	err = json.Unmarshal(bodyBytes, &object)
 	if err != nil {
 		span.RecordError(err)
 		return c.String(http.StatusBadRequest, "Invalid request body")
@@ -150,7 +162,7 @@ func (h Handler) Inbox(c echo.Context) error {
 
 	id := c.Param("id")
 
-	result, err := h.service.Inbox(ctx, object, id)
+	result, err := h.service.Inbox(ctx, object, id, c.Request())
 	if err != nil {
 		span.RecordError(err)
 		log.Printf("api/handler/inbox %v", err)

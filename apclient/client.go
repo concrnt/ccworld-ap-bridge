@@ -97,7 +97,7 @@ func (c ApClient) FetchNote(ctx context.Context, noteID string, execEntity types
 }
 
 // FetchPerson fetches a person from remote ap server.
-func (c ApClient) FetchPerson(ctx context.Context, actor string, execEntity types.ApEntity) (types.ApObject, error) {
+func (c ApClient) FetchPerson(ctx context.Context, actor string, execEntity *types.ApEntity) (types.ApObject, error) {
 	_, span := tracer.Start(ctx, "FetchPerson")
 	defer span.End()
 
@@ -123,21 +123,27 @@ func (c ApClient) FetchPerson(ctx context.Context, actor string, execEntity type
 	req.Header.Set("Host", req.URL.Host)
 	client := new(http.Client)
 
-	priv, err := c.store.LoadKey(ctx, execEntity)
-	if err != nil {
-		log.Println(err)
-		return person, err
-	}
+	if execEntity != nil {
+		priv, err := c.store.LoadKey(ctx, *execEntity)
+		if err != nil {
+			log.Println(err)
+			return person, err
+		}
 
-	prefs := []httpsig.Algorithm{httpsig.RSA_SHA256}
-	digestAlgorithm := httpsig.DigestSha256
-	headersToSign := []string{httpsig.RequestTarget, "date", "host"}
-	signer, _, err := httpsig.NewSigner(prefs, digestAlgorithm, headersToSign, httpsig.Signature, 0)
-	if err != nil {
-		log.Println(err)
-		return person, err
+		prefs := []httpsig.Algorithm{httpsig.RSA_SHA256}
+		digestAlgorithm := httpsig.DigestSha256
+		headersToSign := []string{httpsig.RequestTarget, "date", "host"}
+		signer, _, err := httpsig.NewSigner(prefs, digestAlgorithm, headersToSign, httpsig.Signature, 0)
+		if err != nil {
+			log.Println(err)
+			return person, err
+		}
+		err = signer.SignRequest(priv, "https://"+c.config.FQDN+"/ap/acct/"+execEntity.ID+"#main-key", req, nil)
+		if err != nil {
+			log.Println(err)
+			return person, err
+		}
 	}
-	err = signer.SignRequest(priv, "https://"+c.config.FQDN+"/ap/acct/"+execEntity.ID+"#main-key", req, nil)
 
 	resp, err := client.Do(req)
 	if err != nil {

@@ -74,7 +74,7 @@ func (s *Service) Follow(ctx context.Context, requester, targetID string) (types
 		return types.ApFollow{}, err
 	}
 
-	targetPerson, err := s.apclient.FetchPerson(ctx, targetActor, entity)
+	targetPerson, err := s.apclient.FetchPerson(ctx, targetActor, &entity)
 	if err != nil {
 		span.RecordError(err)
 		return types.ApFollow{}, err
@@ -136,7 +136,7 @@ func (s *Service) UnFollow(ctx context.Context, requester, targetID string) (typ
 		return types.ApFollow{}, err
 	}
 
-	targetPerson, err := s.apclient.FetchPerson(ctx, targetActor, entity)
+	targetPerson, err := s.apclient.FetchPerson(ctx, targetActor, &entity)
 	if err != nil {
 		span.RecordError(err)
 		return types.ApFollow{}, err
@@ -321,7 +321,7 @@ func (s *Service) ResolvePerson(ctx context.Context, id, requester string) (type
 		}
 	}
 
-	person, err := s.apclient.FetchPerson(ctx, id, entity)
+	person, err := s.apclient.FetchPerson(ctx, id, &entity)
 	if err != nil {
 		span.RecordError(err)
 		return types.ApObject{}, err
@@ -358,7 +358,7 @@ func (s *Service) ImportNote(ctx context.Context, noteID, requester string) (cor
 	}
 
 	// save person
-	person, err := s.apclient.FetchPerson(ctx, note.AttributedTo, entity)
+	person, err := s.apclient.FetchPerson(ctx, note.AttributedTo, &entity)
 	if err != nil {
 		span.RecordError(err)
 		return core.Message{}, err
