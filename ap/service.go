@@ -312,6 +312,13 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 	err = verifier.Verify(pub, httpsig.RSA_SHA256)
 	if err != nil {
 		fmt.Println("Verify error:", err)
+
+		fmt.Println("keyid", keyid)
+		fmt.Println("pemStr", pemStr)
+
+		jsonPrint("request", verifier)
+		jsonPrint("object", object)
+
 		span.RecordError(err)
 		return types.ApObject{}, errors.Wrap(err, "ap/service/inbox Verify")
 	}
