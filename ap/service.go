@@ -183,7 +183,10 @@ func (s *Service) User(ctx context.Context, id string) (types.ApObject, error) {
 	}
 
 	return types.ApObject{
-		Context:     "https://www.w3.org/ns/activitystreams",
+		Context: []string{
+			"https://www.w3.org/ns/activitystreams",
+			"https://w3id.org/security/v1",
+		},
 		Type:        "Person",
 		ID:          "https://" + s.config.FQDN + "/ap/acct/" + id,
 		Inbox:       "https://" + s.config.FQDN + "/ap/acct/" + id + "/inbox",

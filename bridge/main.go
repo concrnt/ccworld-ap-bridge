@@ -472,7 +472,10 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 	if document.Schema == world.MarkdownMessageSchema || document.Schema == world.MediaMessageSchema { // Note
 
 		return types.ApObject{
-			Context:        "https://www.w3.org/ns/activitystreams",
+			Context: []string{
+				"https://www.w3.org/ns/activitystreams",
+				"https://misskey-hub.net/ns#_misskey_content",
+			},
 			Type:           "Note",
 			ID:             "https://" + s.config.FQDN + "/ap/note/" + message.ID,
 			AttributedTo:   "https://" + s.config.FQDN + "/ap/acct/" + authorEntity.ID,
@@ -532,7 +535,10 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 		}
 
 		return types.ApObject{
-			Context:        "https://www.w3.org/ns/activitystreams",
+			Context: []string{
+				"https://www.w3.org/ns/activitystreams",
+				"https://misskey-hub.net/ns#_misskey_content",
+			},
 			Type:           "Note",
 			ID:             "https://" + s.config.FQDN + "/ap/note/" + message.ID,
 			AttributedTo:   "https://" + s.config.FQDN + "/ap/acct/" + authorEntity.ID,
@@ -591,7 +597,10 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 		}
 
 		return types.ApObject{
-			Context:        "https://www.w3.org/ns/activitystreams",
+			Context: []string{
+				"https://www.w3.org/ns/activitystreams",
+				"https://misskey-hub.net/ns#_misskey_content",
+			},
 			Type:           "Note",
 			ID:             "https://" + s.config.FQDN + "/ap/note/" + message.ID,
 			AttributedTo:   "https://" + s.config.FQDN + "/ap/acct/" + authorEntity.ID,
