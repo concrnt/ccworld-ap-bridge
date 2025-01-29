@@ -269,7 +269,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		recipients, err := s.store.GetEntityByID(ctx, inboxId)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox GetEntityByID")
+			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox GetEntityByID: "+inboxId)
 		}
 
 		recipientEntity = &recipients
