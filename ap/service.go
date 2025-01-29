@@ -88,23 +88,27 @@ func (s *Service) WebFinger(ctx context.Context, resource string) (types.WebFing
 	ctx, span := tracer.Start(ctx, "Ap.Service.WebFinger")
 	defer span.End()
 
-	split := strings.Split(resource, ":")
-	if len(split) != 2 {
+	var username string
+
+	switch {
+	case strings.HasPrefix(resource, "acct:"):
+		split := strings.Split(strings.TrimPrefix(resource, "acct:"), "@")
+		if len(split) != 2 {
+			return types.WebFinger{}, errors.New("invalid resource")
+		}
+		domain := split[1]
+		if domain != s.config.FQDN {
+			return types.WebFinger{}, errors.New("domain not found")
+		}
+		username = split[0]
+
+	case strings.HasPrefix(resource, "https://"+s.config.FQDN+"/ap/acct/"):
+		username = strings.TrimPrefix(resource, "https://"+s.config.FQDN+"/ap/acct/")
+
+	default:
 		return types.WebFinger{}, errors.New("invalid resource")
-	}
-	rt, id := split[0], split[1]
-	if rt != "acct" {
-		return types.WebFinger{}, errors.New("invalid resource type")
 	}
 
-	split = strings.Split(id, "@")
-	if len(split) != 2 {
-		return types.WebFinger{}, errors.New("invalid resource")
-	}
-	username, domain := split[0], split[1]
-	if domain != s.config.FQDN {
-		return types.WebFinger{}, errors.New("domain not found")
-	}
 	_, err := s.store.GetEntityByID(ctx, username)
 	if err != nil {
 		return types.WebFinger{}, err
