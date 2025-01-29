@@ -254,14 +254,12 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 
 	verifier, err := httpsig.NewVerifier(request)
 	if err != nil {
-		fmt.Println("NewVerifier error")
 		span.RecordError(err)
 		return types.ApObject{}, errors.Wrap(err, "ap/service/inbox NewVerifier")
 	}
 
 	keyid := verifier.KeyId()
 	if keyid == "" {
-		fmt.Println("KeyId not found")
 		span.RecordError(err)
 		return types.ApObject{}, errors.New("ap/service/inbox KeyId not found")
 	}
@@ -270,7 +268,6 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 	if inboxId != "" {
 		recipients, err := s.store.GetEntityByID(ctx, inboxId)
 		if err != nil {
-			fmt.Println("GetEntityByID error:", err)
 			span.RecordError(err)
 			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox GetEntityByID")
 		}
@@ -280,14 +277,12 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 
 	requester, err := s.apclient.FetchPerson(ctx, keyid, recipientEntity)
 	if err != nil {
-		fmt.Println("FetchPerson error:", err)
 		span.RecordError(err)
 		return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/follow FetchPerson")
 	}
 
 	pubkey := requester.PublicKey
 	if pubkey == nil {
-		fmt.Println("PublicKey not found")
 		span.RecordError(err)
 		return types.ApObject{}, errors.New("ap/service/inbox PublicKey not found")
 	}
@@ -297,14 +292,12 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 
 	block, _ := pem.Decode(pemBytes)
 	if block == nil {
-		fmt.Println("Decode error")
 		span.RecordError(err)
 		return types.ApObject{}, errors.New("ap/service/inbox Decode error")
 	}
 
 	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
-		fmt.Println("ParsePKIXPublicKey error:", err)
 		span.RecordError(err)
 		return types.ApObject{}, errors.Wrap(err, "ap/service/inbox ParsePKIXPublicKey")
 	}
@@ -316,7 +309,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		fmt.Println("keyid", keyid)
 		fmt.Println("pemStr", pemStr)
 
-		jsonPrint("request", verifier)
+		jsonPrint("header", request.Header)
 		jsonPrint("object", object)
 
 		span.RecordError(err)
