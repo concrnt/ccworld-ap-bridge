@@ -284,7 +284,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 	pubkey := requester.PublicKey
 	if pubkey == nil {
 		span.RecordError(err)
-		return types.ApObject{}, errors.New("ap/service/inbox PublicKey not found")
+		return types.ApObject{}, errors.New("ap/service/inbox PublicKey not found: " + keyid)
 	}
 	pemStr := pubkey.PublicKeyPem
 
