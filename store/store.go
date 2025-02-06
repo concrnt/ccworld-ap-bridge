@@ -46,7 +46,7 @@ func (s Store) GetAllEntities(ctx context.Context) ([]types.ApEntity, error) {
 	defer span.End()
 
 	var entities []types.ApEntity
-	err := s.db.WithContext(ctx).Find(&entities).Error
+	err := s.db.WithContext(ctx).Where("enabled = ?", true).Find(&entities).Error
 	return entities, err
 }
 

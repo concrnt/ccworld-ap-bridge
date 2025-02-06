@@ -80,6 +80,15 @@ func (w *Worker) StartMessageWorker() {
 				log.Printf("worker/message/%v GetEntityByID: %v", userID, err)
 				continue
 			}
+
+			if !entity.Enabled {
+				if workerFound {
+					log.Printf("worker/message/%v cancel worker\n", userID)
+					existingWorker()
+				}
+				continue
+			}
+
 			ownerID := entity.CCID
 
 			var newState DeliverState

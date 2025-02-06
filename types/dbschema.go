@@ -8,6 +8,7 @@ import (
 type ApEntity struct {
 	ID          string         `json:"id" gorm:"type:text"`
 	CCID        string         `json:"ccid" gorm:"type:char(42)"`
+	Enabled     bool           `json:"enabled" gorm:"type:bool;default:true"`
 	Publickey   string         `json:"publickey" gorm:"type:text"`
 	Privatekey  string         `json:"privatekey" gorm:"type:text"`
 	AlsoKnownAs pq.StringArray `json:"aliases" gorm:"type:text[]"`
