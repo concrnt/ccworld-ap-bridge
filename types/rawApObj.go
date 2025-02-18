@@ -126,15 +126,24 @@ func (r *RawApObj) GetStringSlice(key string) ([]string, bool) {
 		return nil, false
 	}
 
-	arr, ok := value.([]string)
-	if !ok {
+	arr, ok := value.([]any)
+	if ok {
+		var result []string
+		for _, v := range arr {
+			scalar, ok := v.(string)
+			if !ok {
+				return []string{}, false
+			}
+			result = append(result, scalar)
+		}
+		return result, true
+	} else {
 		scalar, ok := value.(string)
 		if !ok {
-			return nil, false
+			return []string{}, false
 		}
 		return []string{scalar}, true
 	}
-	return arr, ok
 }
 
 func (r *RawApObj) MustGetStringSlice(key string) []string {

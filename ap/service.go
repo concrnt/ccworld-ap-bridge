@@ -207,7 +207,7 @@ func (s *Service) User(ctx context.Context, id string) (types.ApObject, error) {
 		Name:              profileDocument.Body.Username,
 		Summary:           profileDocument.Body.Description,
 		URL:               "https://" + s.config.FQDN + "/ap/acct/" + id,
-		Icon: types.Icon{
+		Icon: &types.Icon{
 			Type:      "Image",
 			MediaType: "image/png",
 			URL:       profileDocument.Body.Avatar,
@@ -346,7 +346,7 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 			ID:      "https://" + s.config.FQDN + "/ap/acct/" + id + "/follows/" + url.PathEscape(requester.MustGetString("id")),
 			Type:    "Accept",
 			Actor:   "https://" + s.config.FQDN + "/ap/acct/" + id,
-			Object:  object,
+			Object:  object.GetData(),
 		}
 
 		split := strings.Split(object.MustGetString("object"), "/")
@@ -614,20 +614,11 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/create FetchPerson")
 			}
 
-			// convertObject
-			noteBytes, err := json.Marshal(createObject)
+			created, err := s.bridge.NoteToMessage(ctx, createObject, person, destStreams)
 			if err != nil {
 				span.RecordError(err)
-				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/create Marshal")
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/create NoteToMessage")
 			}
-
-			note, err := types.LoadAsRawApObj(noteBytes)
-			if err != nil {
-				span.RecordError(err)
-				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/create Unmarshal")
-			}
-
-			created, err := s.bridge.NoteToMessage(ctx, note, person, destStreams)
 
 			// save reference
 			err = s.store.UpdateApObjectReference(ctx, types.ApObjectReference{

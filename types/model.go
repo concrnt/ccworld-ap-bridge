@@ -85,7 +85,7 @@ type ApObject struct {
 	Name              string           `json:"name,omitempty"`
 	Summary           string           `json:"summary,omitempty"`
 	URL               string           `json:"url,omitempty"`
-	Icon              Icon             `json:"icon,omitempty"`
+	Icon              *Icon            `json:"icon,omitempty"`
 	PublicKey         *Key             `json:"publicKey,omitempty"`
 	Object            any              `json:"object,omitempty"`
 	Sensitive         bool             `json:"sensitive,omitempty"`
@@ -124,7 +124,7 @@ type Tag struct {
 	Type string `json:"type,omitempty"`
 	ID   string `json:"id,omitempty"`
 	Name string `json:"name,omitempty"`
-	Icon Icon   `json:"icon,omitempty"`
+	Icon *Icon  `json:"icon,omitempty"`
 	Href string `json:"href,omitempty"`
 }
 

@@ -222,7 +222,7 @@ func (w *Worker) StartAssociationWorker() {
 							Type: "Emoji",
 							ID:   reactionDoc.Body.ImageURL,
 							Name: ":" + reactionDoc.Body.Shortcode + ":",
-							Icon: types.Icon{
+							Icon: &types.Icon{
 								Type:      "Image",
 								MediaType: "image/png",
 								URL:       reactionDoc.Body.ImageURL,

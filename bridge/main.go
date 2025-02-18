@@ -387,7 +387,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 				ID:   v.ImageURL,
 				Type: "Emoji",
 				Name: ":" + k + ":",
-				Icon: types.Icon{
+				Icon: &types.Icon{
 					Type:      "Image",
 					MediaType: "image/png",
 					URL:       v.ImageURL,
