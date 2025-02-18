@@ -27,6 +27,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-tags: ${{ github.ref_name }}
 
       - name: Setup Docker buildx
         uses: docker/setup-buildx-action@v3
