@@ -50,7 +50,10 @@ func NewService(
 
 func (s Service) NoteToMessage(ctx context.Context, object *types.RawApObj, person *types.RawApObj, destStreams []string) (core.Message, error) {
 
-	content := object.MustGetString("content")
+	content, ok := object.GetString("_misskey_content")
+	if !ok {
+		content = object.MustGetString("content")
+	}
 
 	tags, _ := object.GetRawSlice("tag")
 	var emojis map[string]world.Emoji = make(map[string]world.Emoji)
@@ -162,8 +165,117 @@ CHECK_VISIBILITY:
 	}
 
 	var document []byte
-	if object.MustGetString("inReplyTo") == "" {
+	if object.MustGetString("inReplyTo") != "" {
 
+		var ReplyToMessageID string
+		var ReplyToMessageAuthor string
+
+		if strings.HasPrefix(object.MustGetString("inReplyTo"), "https://"+s.config.FQDN+"/ap/note/") {
+			replyToMessageID := strings.TrimPrefix(object.MustGetString("inReplyTo"), "https://"+s.config.FQDN+"/ap/note/")
+			message, err := s.client.GetMessage(ctx, s.config.FQDN, replyToMessageID, nil)
+			if err != nil {
+				return core.Message{}, errors.Wrap(err, "message not found")
+			}
+			ReplyToMessageID = message.ID
+			ReplyToMessageAuthor = message.Author
+		} else {
+			ref, err := s.store.GetApObjectReferenceByApObjectID(ctx, object.MustGetString("inReplyTo"))
+			if err != nil {
+				return core.Message{}, errors.Wrap(err, "object not found")
+			}
+			ReplyToMessageID = ref.CcObjectID
+			ReplyToMessageAuthor = s.config.ProxyCCID
+		}
+
+		doc := core.MessageDocument[world.ReplyMessage]{
+			DocumentBase: core.DocumentBase[world.ReplyMessage]{
+				Signer: s.config.ProxyCCID,
+				Type:   "message",
+				Schema: world.ReplyMessageSchema,
+				Body: world.ReplyMessage{
+					Body: contentWithImage,
+					ProfileOverride: &world.ProfileOverride{
+						Username:    username,
+						Avatar:      person.MustGetString("icon.url"),
+						Description: person.MustGetString("summary"),
+						Link:        person.MustGetString("url"),
+					},
+					Emojis:               &emojis,
+					ReplyToMessageID:     ReplyToMessageID,
+					ReplyToMessageAuthor: ReplyToMessageAuthor,
+				},
+				Meta: map[string]interface{}{
+					"apActor":          person.MustGetString("url"),
+					"apObjectRef":      object.MustGetString("id"),
+					"apPublisherInbox": person.MustGetString("inbox"),
+					"visibility":       visibility,
+				},
+				SignedAt:     date,
+				Policy:       policy,
+				PolicyParams: policyParams,
+			},
+			Timelines: destStreams,
+		}
+		document, err = json.Marshal(doc)
+		if err != nil {
+			return core.Message{}, errors.Wrap(err, "json marshal error")
+		}
+	} else if object.MustGetString("quoteUrl") != "" {
+		var RerouteMessageID string
+		var RerouteMessageAuthor string
+
+		if strings.HasPrefix(object.MustGetString("quoteUrl"), "https://"+s.config.FQDN+"/ap/note/") {
+			replyToMessageID := strings.TrimPrefix(object.MustGetString("quoteUrl"), "https://"+s.config.FQDN+"/ap/note/")
+			message, err := s.client.GetMessage(ctx, s.config.FQDN, replyToMessageID, nil)
+			if err != nil {
+				return core.Message{}, errors.Wrap(err, "message not found")
+			}
+			RerouteMessageID = message.ID
+			RerouteMessageAuthor = message.Author
+		} else {
+			ref, err := s.store.GetApObjectReferenceByApObjectID(ctx, object.MustGetString("quoteUrl"))
+			if err != nil {
+				return core.Message{}, errors.Wrap(err, "object not found")
+			}
+			RerouteMessageID = ref.CcObjectID
+			RerouteMessageAuthor = s.config.ProxyCCID
+		}
+
+		doc := core.MessageDocument[world.RerouteMessage]{
+			DocumentBase: core.DocumentBase[world.RerouteMessage]{
+				Signer: s.config.ProxyCCID,
+				Type:   "message",
+				Schema: world.RerouteMessageSchema,
+				Body: world.RerouteMessage{
+					Body: contentWithImage,
+					ProfileOverride: &world.ProfileOverride{
+						Username:    username,
+						Avatar:      person.MustGetString("icon.url"),
+						Description: person.MustGetString("summary"),
+						Link:        person.MustGetString("url"),
+					},
+					Emojis:               &emojis,
+					RerouteMessageID:     RerouteMessageID,
+					RerouteMessageAuthor: RerouteMessageAuthor,
+				},
+				Meta: map[string]interface{}{
+					"apActor":          person.MustGetString("url"),
+					"apObjectRef":      object.MustGetString("id"),
+					"apPublisherInbox": person.MustGetString("inbox"),
+					"visibility":       visibility,
+				},
+				SignedAt:     date,
+				Policy:       policy,
+				PolicyParams: policyParams,
+			},
+			Timelines: destStreams,
+		}
+		document, err = json.Marshal(doc)
+		if err != nil {
+			return core.Message{}, errors.Wrap(err, "json marshal error")
+		}
+
+	} else {
 		media := []world.Media{}
 		for _, attachment := range object.MustGetRawSlice("attachment") {
 			flag := ""
@@ -244,61 +356,6 @@ CHECK_VISIBILITY:
 			}
 		}
 
-	} else {
-
-		var ReplyToMessageID string
-		var ReplyToMessageAuthor string
-
-		if strings.HasPrefix(object.MustGetString("inReplyTo"), "https://"+s.config.FQDN+"/ap/note/") {
-			replyToMessageID := strings.TrimPrefix(object.MustGetString("inReplyTo"), "https://"+s.config.FQDN+"/ap/note/")
-			message, err := s.client.GetMessage(ctx, s.config.FQDN, replyToMessageID, nil)
-			if err != nil {
-				return core.Message{}, errors.Wrap(err, "message not found")
-			}
-			ReplyToMessageID = message.ID
-			ReplyToMessageAuthor = message.Author
-		} else {
-			ref, err := s.store.GetApObjectReferenceByApObjectID(ctx, object.MustGetString("inReplyTo"))
-			if err != nil {
-				return core.Message{}, errors.Wrap(err, "object not found")
-			}
-			ReplyToMessageID = ref.CcObjectID
-			ReplyToMessageAuthor = s.config.ProxyCCID
-		}
-
-		doc := core.MessageDocument[world.ReplyMessage]{
-			DocumentBase: core.DocumentBase[world.ReplyMessage]{
-				Signer: s.config.ProxyCCID,
-				Type:   "message",
-				Schema: world.ReplyMessageSchema,
-				Body: world.ReplyMessage{
-					Body: contentWithImage,
-					ProfileOverride: &world.ProfileOverride{
-						Username:    username,
-						Avatar:      person.MustGetString("icon.url"),
-						Description: person.MustGetString("summary"),
-						Link:        person.MustGetString("url"),
-					},
-					Emojis:               &emojis,
-					ReplyToMessageID:     ReplyToMessageID,
-					ReplyToMessageAuthor: ReplyToMessageAuthor,
-				},
-				Meta: map[string]interface{}{
-					"apActor":          person.MustGetString("url"),
-					"apObjectRef":      object.MustGetString("id"),
-					"apPublisherInbox": person.MustGetString("inbox"),
-					"visibility":       visibility,
-				},
-				SignedAt:     date,
-				Policy:       policy,
-				PolicyParams: policyParams,
-			},
-			Timelines: destStreams,
-		}
-		document, err = json.Marshal(doc)
-		if err != nil {
-			return core.Message{}, errors.Wrap(err, "json marshal error")
-		}
 	}
 
 	signatureBytes, err := core.SignBytes(document, s.config.ProxyPriv)
