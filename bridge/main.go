@@ -48,21 +48,17 @@ func NewService(
 	}
 }
 
-func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, person *types.RawApObj, destStreams []string) (core.Message, error) {
+func (s Service) NoteToMessage(ctx context.Context, object *types.RawApObj, person *types.RawApObj, destStreams []string) (core.Message, error) {
 
-	content := object.Content
+	content := object.MustGetString("content")
 
-	tags, err := types.ParseTags(object.Tag)
-	if err != nil {
-		tags = []types.Tag{}
-	}
-
+	tags, _ := object.GetRawSlice("tag")
 	var emojis map[string]world.Emoji = make(map[string]world.Emoji)
 	for _, tag := range tags {
-		if tag.Type == "Emoji" {
-			name := strings.Trim(tag.Name, ":")
+		if tag.MustGetString("type") == "Emoji" {
+			name := strings.Trim(tag.MustGetString("name"), ":")
 			emojis[name] = world.Emoji{
-				ImageURL: tag.Icon.URL,
+				ImageURL: tag.MustGetString("icon.url"),
 			}
 		}
 	}
@@ -76,16 +72,16 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 	}
 
 	contentWithImage := content
-	for _, attachment := range object.Attachment {
-		if attachment.Type == "Document" {
-			contentWithImage += "\n\n![image](" + attachment.URL + ")"
+	for _, attachment := range object.MustGetRawSlice("attachment") {
+		if attachment.MustGetString("type") == "document" {
+			contentWithImage += "\n\n![image](" + attachment.MustGetString("url") + ")"
 		}
 	}
 
-	if object.Sensitive {
+	if object.MustGetBool("sensitive") {
 		summary := "CW"
-		if object.Summary != "" {
-			summary = object.Summary
+		if object.MustGetString("summary") != "" {
+			summary = object.MustGetString("summary")
 		}
 		content = "<details>\n<summary>" + summary + "</summary>\n" + content + "\n</details>"
 		contentWithImage = "<details>\n<summary>" + summary + "</summary>\n" + contentWithImage + "\n</details>"
@@ -96,48 +92,13 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 		username = person.MustGetString("preferredUsername")
 	}
 
-	date, err := time.Parse(time.RFC3339Nano, object.Published)
+	date, err := time.Parse(time.RFC3339, object.MustGetString("published"))
 	if err != nil {
 		date = time.Now()
 	}
 
-	to := []string{}
-	toStr, ok := object.To.(string)
-	if ok {
-		to = append(to, toStr)
-	} else {
-		arr, ok := object.To.([]any)
-		if !ok {
-			return core.Message{}, errors.New("invalid to")
-		}
-		for _, v := range arr {
-			vStr, ok := v.(string)
-			if !ok {
-				fmt.Println("invalid to", v)
-				continue
-			}
-			to = append(to, vStr)
-		}
-	}
-
-	cc := []string{}
-	ccStr, ok := object.CC.(string)
-	if ok {
-		cc = append(cc, ccStr)
-	} else {
-		arr, ok := object.CC.([]any)
-		if !ok {
-			return core.Message{}, errors.New("invalid cc")
-		}
-		for _, v := range arr {
-			vStr, ok := v.(string)
-			if !ok {
-				fmt.Println("invalid cc", v)
-				continue
-			}
-			cc = append(cc, vStr)
-		}
-	}
+	to := object.MustGetStringSlice("to")
+	cc := object.MustGetStringSlice("cc")
 
 	visibility := "unknown"
 	participants := []string{}
@@ -151,7 +112,7 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 		if strings.HasSuffix(v, "/followers") {
 			visibility = "followers"
 
-			follows, err := s.store.GetFollowsByPublisher(ctx, object.AttributedTo)
+			follows, err := s.store.GetFollowsByPublisher(ctx, object.MustGetString("attributedTo"))
 			if err != nil {
 				fmt.Println("followers not found")
 				continue
@@ -201,22 +162,22 @@ CHECK_VISIBILITY:
 	}
 
 	var document []byte
-	if object.InReplyTo == "" {
+	if object.MustGetString("inReplyTo") == "" {
 
 		media := []world.Media{}
-		for _, attachment := range object.Attachment {
+		for _, attachment := range object.MustGetRawSlice("attachment") {
 			flag := ""
-			if attachment.Sensitive || object.Sensitive {
+			if attachment.MustGetBool("sensitive") {
 				flag = "sensitive"
 			}
 			media = append(media, world.Media{
-				MediaURL:  attachment.URL,
-				MediaType: attachment.MediaType,
+				MediaURL:  attachment.MustGetString("url"),
+				MediaType: attachment.MustGetString("mediaType"),
 				Flag:      flag,
 			})
 		}
 
-		if len(object.Attachment) > 0 {
+		if len(object.MustGetRawSlice("attachment")) > 0 {
 			doc := core.MessageDocument[world.MediaMessage]{
 				DocumentBase: core.DocumentBase[world.MediaMessage]{
 					Signer: s.config.ProxyCCID,
@@ -235,7 +196,7 @@ CHECK_VISIBILITY:
 					},
 					Meta: map[string]interface{}{
 						"apActor":          person.MustGetString("url"),
-						"apObjectRef":      object.ID,
+						"apObjectRef":      object.MustGetString("id"),
 						"apPublisherInbox": person.MustGetString("inbox"),
 						"visibility":       visibility,
 					},
@@ -267,7 +228,7 @@ CHECK_VISIBILITY:
 					},
 					Meta: map[string]interface{}{
 						"apActor":          person.MustGetString("url"),
-						"apObjectRef":      object.ID,
+						"apObjectRef":      object.MustGetString("id"),
 						"apPublisherInbox": person.MustGetString("inbox"),
 						"visibility":       visibility,
 					},
@@ -288,8 +249,8 @@ CHECK_VISIBILITY:
 		var ReplyToMessageID string
 		var ReplyToMessageAuthor string
 
-		if strings.HasPrefix(object.InReplyTo, "https://"+s.config.FQDN+"/ap/note/") {
-			replyToMessageID := strings.TrimPrefix(object.InReplyTo, "https://"+s.config.FQDN+"/ap/note/")
+		if strings.HasPrefix(object.MustGetString("inReplyTo"), "https://"+s.config.FQDN+"/ap/note/") {
+			replyToMessageID := strings.TrimPrefix(object.MustGetString("inReplyTo"), "https://"+s.config.FQDN+"/ap/note/")
 			message, err := s.client.GetMessage(ctx, s.config.FQDN, replyToMessageID, nil)
 			if err != nil {
 				return core.Message{}, errors.Wrap(err, "message not found")
@@ -297,7 +258,7 @@ CHECK_VISIBILITY:
 			ReplyToMessageID = message.ID
 			ReplyToMessageAuthor = message.Author
 		} else {
-			ref, err := s.store.GetApObjectReferenceByApObjectID(ctx, object.InReplyTo)
+			ref, err := s.store.GetApObjectReferenceByApObjectID(ctx, object.MustGetString("inReplyTo"))
 			if err != nil {
 				return core.Message{}, errors.Wrap(err, "object not found")
 			}
@@ -324,7 +285,7 @@ CHECK_VISIBILITY:
 				},
 				Meta: map[string]interface{}{
 					"apActor":          person.MustGetString("url"),
-					"apObjectRef":      object.ID,
+					"apObjectRef":      object.MustGetString("id"),
 					"apPublisherInbox": person.MustGetString("inbox"),
 					"visibility":       visibility,
 				},

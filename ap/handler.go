@@ -2,7 +2,6 @@ package ap
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"log"
 	"net/http"
@@ -153,8 +152,7 @@ func (h Handler) Inbox(c echo.Context) error {
 
 	c.Request().Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
-	var object types.ApObject
-	err = json.Unmarshal(bodyBytes, &object)
+	object, err := types.LoadAsRawApObj(bodyBytes)
 	if err != nil {
 		span.RecordError(err)
 		return c.String(http.StatusBadRequest, "Invalid request body")

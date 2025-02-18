@@ -45,14 +45,13 @@ func NewApClient(
 }
 
 // FetchNote fetches a note from remote ap server.
-func (c ApClient) FetchNote(ctx context.Context, noteID string, execEntity types.ApEntity) (types.ApObject, error) {
+func (c ApClient) FetchNote(ctx context.Context, noteID string, execEntity types.ApEntity) (*types.RawApObj, error) {
 	_, span := tracer.Start(ctx, "FetchNote")
 	defer span.End()
 
-	var note types.ApObject
 	req, err := http.NewRequest("GET", noteID, nil)
 	if err != nil {
-		return note, err
+		return nil, err
 	}
 	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 	req.Header.Set("Accept", "application/activity+json")
@@ -64,7 +63,7 @@ func (c ApClient) FetchNote(ctx context.Context, noteID string, execEntity types
 	priv, err := c.store.LoadKey(ctx, execEntity)
 	if err != nil {
 		log.Println(err)
-		return note, err
+		return nil, err
 	}
 
 	prefs := []httpsig.Algorithm{httpsig.RSA_SHA256}
@@ -73,22 +72,22 @@ func (c ApClient) FetchNote(ctx context.Context, noteID string, execEntity types
 	signer, _, err := httpsig.NewSigner(prefs, digestAlgorithm, headersToSign, httpsig.Signature, 0)
 	if err != nil {
 		log.Println(err)
-		return note, err
+		return nil, err
 	}
 	err = signer.SignRequest(priv, "https://"+c.config.FQDN+"/ap/acct/"+execEntity.ID+"#main-key", req, nil)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return note, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return note, err
+		return nil, err
 	}
 
-	err = json.Unmarshal(body, &note)
+	note, err := types.LoadAsRawApObj(body)
 	if err != nil {
 		return note, err
 	}
@@ -104,7 +103,7 @@ func (c ApClient) FetchPerson(ctx context.Context, actor string, execEntity *typ
 	// try cache
 	cache, err := c.mc.Get(actor)
 	if err == nil {
-		person, err := types.LoadAsRawApObj(string(cache.Value))
+		person, err := types.LoadAsRawApObj(cache.Value)
 		if err == nil {
 			return person, nil
 		}
@@ -151,7 +150,7 @@ func (c ApClient) FetchPerson(ctx context.Context, actor string, execEntity *typ
 
 	body, _ := io.ReadAll(resp.Body)
 
-	person, err := types.LoadAsRawApObj(string(body))
+	person, err := types.LoadAsRawApObj(body)
 	if err != nil {
 		log.Println(err)
 		return person, err

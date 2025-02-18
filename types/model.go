@@ -1,9 +1,5 @@
 package types
 
-import (
-	"errors"
-)
-
 // WellKnown is a struct for a well-known response.
 type WellKnown struct {
 	// Subject string `json:"subject"`
@@ -145,83 +141,4 @@ type ApConfig struct {
 type AccountStats struct {
 	Follows   []string `json:"follows"`
 	Followers []string `json:"followers"`
-}
-
-// ---------------------------------------------------------------------
-
-func ParseTags(tags interface{}) ([]Tag, error) {
-	var tagList []Tag
-	switch tags.(type) {
-	case []interface{}:
-		for _, tag := range tags.([]interface{}) {
-			tagMap, ok := tag.(map[string]interface{})
-			if !ok {
-				return nil, errors.New("Invalid tag object")
-			}
-			tagType, ok := tagMap["type"].(string)
-			if !ok {
-				return nil, errors.New("Invalid tag object")
-			}
-			tagName, ok := tagMap["name"].(string)
-			if !ok {
-				return nil, errors.New("Invalid tag object")
-			}
-			tagIcon, ok := tagMap["icon"].(map[string]interface{})
-			if !ok {
-				return nil, errors.New("Invalid tag object")
-			}
-			tagIconType, ok := tagIcon["type"].(string)
-			if !ok {
-				return nil, errors.New("Invalid tag object")
-			}
-			tagIconUrl, ok := tagIcon["url"].(string)
-			if !ok {
-				return nil, errors.New("Invalid tag object")
-			}
-			tagList = append(tagList, Tag{
-				Type: tagType,
-				Name: tagName,
-				Icon: Icon{
-					Type: tagIconType,
-					URL:  tagIconUrl,
-				},
-			})
-		}
-	case map[string]interface{}:
-		tagMap, ok := tags.(map[string]interface{})
-		if !ok {
-			return nil, errors.New("Invalid tag object")
-		}
-		tagType, ok := tagMap["type"].(string)
-		if !ok {
-			return nil, errors.New("Invalid tag object")
-		}
-		tagName, ok := tagMap["name"].(string)
-		if !ok {
-			return nil, errors.New("Invalid tag object")
-		}
-		tagIcon, ok := tagMap["icon"].(map[string]interface{})
-		if !ok {
-			return nil, errors.New("Invalid tag object")
-		}
-		tagIconType, ok := tagIcon["type"].(string)
-		if !ok {
-			return nil, errors.New("Invalid tag object")
-		}
-		tagIconUrl, ok := tagIcon["url"].(string)
-		if !ok {
-			return nil, errors.New("Invalid tag object")
-		}
-		tagList = append(tagList, Tag{
-			Type: tagType,
-			Name: tagName,
-			Icon: Icon{
-				Type: tagIconType,
-				URL:  tagIconUrl,
-			},
-		})
-	default:
-		return nil, errors.New("Invalid tag object")
-	}
-	return tagList, nil
 }

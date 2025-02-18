@@ -360,7 +360,7 @@ func (s *Service) ImportNote(ctx context.Context, noteID, requester string) (cor
 	}
 
 	// save person
-	person, err := s.apclient.FetchPerson(ctx, note.AttributedTo, &entity)
+	person, err := s.apclient.FetchPerson(ctx, note.MustGetString("attributedTo"), &entity)
 	if err != nil {
 		span.RecordError(err)
 		return core.Message{}, err
