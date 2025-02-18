@@ -583,6 +583,24 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 				return types.ApObject{}, nil
 			}
 
+			destStreams := []string{}
+
+			// list up to and ccs
+			to, _ := createObject.GetStringSlice("to")
+			cc, _ := createObject.GetStringSlice("cc")
+			for _, recipient := range append(to, cc...) {
+				if strings.HasPrefix(recipient, "https://"+s.config.FQDN+"/ap/acct/") {
+					recipient = strings.TrimPrefix(recipient, "https://"+s.config.FQDN+"/ap/acct/")
+					entity, err := s.store.GetEntityByID(ctx, recipient)
+					if err != nil {
+						log.Println("ap/service/inbox/create GetEntityByID", err)
+						span.RecordError(err)
+						continue
+					}
+					destStreams = append(destStreams, world.UserApStream+"@"+entity.CCID)
+				}
+			}
+
 			// list up follows
 			follows, err := s.store.GetFollowsByPublisher(ctx, object.MustGetString("actor"))
 			if err != nil {
@@ -591,7 +609,6 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 			}
 
 			var rep types.ApEntity
-			destStreams := []string{}
 			for _, follow := range follows {
 				entity, err := s.store.GetEntityByID(ctx, follow.SubscriberUserID)
 				if err != nil {
@@ -608,13 +625,22 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 				return types.ApObject{}, nil
 			}
 
+			var uniqDestStreams []string
+			uniqMap := map[string]struct{}{}
+			for _, destStream := range destStreams {
+				if _, ok := uniqMap[destStream]; !ok {
+					uniqMap[destStream] = struct{}{}
+					uniqDestStreams = append(uniqDestStreams, destStream)
+				}
+			}
+
 			person, err := s.apclient.FetchPerson(ctx, object.MustGetString("actor"), &rep)
 			if err != nil {
 				span.RecordError(err)
 				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/create FetchPerson")
 			}
 
-			created, err := s.bridge.NoteToMessage(ctx, createObject, person, destStreams)
+			created, err := s.bridge.NoteToMessage(ctx, createObject, person, uniqDestStreams)
 			if err != nil {
 				span.RecordError(err)
 				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/create NoteToMessage")
