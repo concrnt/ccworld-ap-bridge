@@ -281,12 +281,12 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/follow FetchPerson")
 	}
 
-	pubkey := requester.PublicKey
+	pubkey, _ := requester.GetRaw("publicKey")
 	if pubkey == nil {
 		span.RecordError(err)
 		return types.ApObject{}, errors.New("ap/service/inbox PublicKey not found: " + keyid)
 	}
-	pemStr := pubkey.PublicKeyPem
+	pemStr := pubkey.MustGetString("publicKeyPem")
 
 	pemBytes := []byte(pemStr)
 
@@ -343,7 +343,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		}
 		accept := types.ApObject{
 			Context: "https://www.w3.org/ns/activitystreams",
-			ID:      "https://" + s.config.FQDN + "/ap/acct/" + id + "/follows/" + url.PathEscape(requester.ID),
+			ID:      "https://" + s.config.FQDN + "/ap/acct/" + id + "/follows/" + url.PathEscape(requester.MustGetString("id")),
 			Type:    "Accept",
 			Actor:   "https://" + s.config.FQDN + "/ap/acct/" + id,
 			Object:  object,
@@ -352,14 +352,14 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		split := strings.Split(object.Object.(string), "/")
 		userID := split[len(split)-1]
 
-		err = s.apclient.PostToInbox(ctx, requester.Inbox, accept, entity)
+		err = s.apclient.PostToInbox(ctx, requester.MustGetString("inbox"), accept, entity)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/follow PostToInbox")
 		}
 
 		// check follow already exists
-		_, err = s.store.GetFollowerByTuple(ctx, userID, requester.ID)
+		_, err = s.store.GetFollowerByTuple(ctx, userID, requester.MustGetString("id"))
 		if err == nil {
 			log.Println("ap/service/inbox/follow follow already exists")
 			return types.ApObject{}, nil
@@ -368,8 +368,8 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		// save follow
 		err = s.store.SaveFollower(ctx, types.ApFollower{
 			ID:                  object.ID,
-			SubscriberInbox:     requester.Inbox,
-			SubscriberPersonURL: requester.ID,
+			SubscriberInbox:     requester.MustGetString("inbox"),
+			SubscriberPersonURL: requester.MustGetString("id"),
 			PublisherUserID:     userID,
 		})
 		if err != nil {
@@ -431,9 +431,9 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like FetchPerson")
 		}
 
-		username := person.Name
+		username := person.MustGetString("name")
 		if len(username) == 0 {
-			username = person.PreferredUsername
+			username = person.MustGetString("preferredUsername")
 		}
 
 		var tag *types.Tag
@@ -453,8 +453,8 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 					Body: world.LikeAssociation{
 						ProfileOverride: &world.ProfileOverride{
 							Username:    username,
-							Avatar:      person.Icon.URL,
-							Description: person.Summary,
+							Avatar:      person.MustGetString("icon.url"),
+							Description: person.MustGetString("summary"),
 							Link:        object.Actor,
 						},
 					},
@@ -485,8 +485,8 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 						ImageURL:  tag.Icon.URL,
 						ProfileOverride: &world.ProfileOverride{
 							Username:    username,
-							Avatar:      person.Icon.URL,
-							Description: person.Summary,
+							Avatar:      person.MustGetString("icon.url"),
+							Description: person.MustGetString("summary"),
 							Link:        object.Actor,
 						},
 					},
@@ -751,9 +751,9 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			}
 		}
 
-		username := person.Name
+		username := person.MustGetString("name")
 		if len(username) == 0 {
-			username = person.PreferredUsername
+			username = person.MustGetString("preferredUsername")
 		}
 
 		doc := core.MessageDocument[world.RerouteMessage]{
@@ -768,15 +768,15 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 					Body:                 object.Content,
 					ProfileOverride: &world.ProfileOverride{
 						Username:    username,
-						Avatar:      person.Icon.URL,
-						Description: person.Summary,
-						Link:        person.URL,
+						Avatar:      person.MustGetString("icon.url"),
+						Description: person.MustGetString("summary"),
+						Link:        object.Actor,
 					},
 				},
 				Meta: map[string]interface{}{
-					"apActor":          person.URL,
+					"apActor":          person.MustGetString("url"),
 					"apObject":         object.ID,
-					"apPublisherInbox": person.Inbox,
+					"apPublisherInbox": person.MustGetString("inbox"),
 				},
 			},
 			Timelines: destStreams,

@@ -48,7 +48,7 @@ func NewService(
 	}
 }
 
-func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, person types.ApObject, destStreams []string) (core.Message, error) {
+func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, person *types.RawApObj, destStreams []string) (core.Message, error) {
 
 	content := object.Content
 
@@ -91,9 +91,9 @@ func (s Service) NoteToMessage(ctx context.Context, object types.ApObject, perso
 		contentWithImage = "<details>\n<summary>" + summary + "</summary>\n" + contentWithImage + "\n</details>"
 	}
 
-	username := person.Name
+	username := person.MustGetString("name")
 	if len(username) == 0 {
-		username = person.PreferredUsername
+		username = person.MustGetString("preferredUsername")
 	}
 
 	date, err := time.Parse(time.RFC3339Nano, object.Published)
@@ -226,17 +226,17 @@ CHECK_VISIBILITY:
 						Body: content,
 						ProfileOverride: &world.ProfileOverride{
 							Username:    username,
-							Avatar:      person.Icon.URL,
-							Description: person.Summary,
-							Link:        person.URL,
+							Avatar:      person.MustGetString("icon.url"),
+							Description: person.MustGetString("summary"),
+							Link:        person.MustGetString("url"),
 						},
 						Medias: &media,
 						Emojis: &emojis,
 					},
 					Meta: map[string]interface{}{
-						"apActor":          person.URL,
+						"apActor":          person.MustGetString("url"),
 						"apObjectRef":      object.ID,
-						"apPublisherInbox": person.Inbox,
+						"apPublisherInbox": person.MustGetString("inbox"),
 						"visibility":       visibility,
 					},
 					SignedAt:     date,
@@ -259,16 +259,16 @@ CHECK_VISIBILITY:
 						Body: content,
 						ProfileOverride: &world.ProfileOverride{
 							Username:    username,
-							Avatar:      person.Icon.URL,
-							Description: person.Summary,
-							Link:        person.URL,
+							Avatar:      person.MustGetString("icon.url"),
+							Description: person.MustGetString("summary"),
+							Link:        person.MustGetString("url"),
 						},
 						Emojis: &emojis,
 					},
 					Meta: map[string]interface{}{
-						"apActor":          person.URL,
+						"apActor":          person.MustGetString("url"),
 						"apObjectRef":      object.ID,
-						"apPublisherInbox": person.Inbox,
+						"apPublisherInbox": person.MustGetString("inbox"),
 						"visibility":       visibility,
 					},
 					SignedAt:     date,
@@ -314,18 +314,18 @@ CHECK_VISIBILITY:
 					Body: contentWithImage,
 					ProfileOverride: &world.ProfileOverride{
 						Username:    username,
-						Avatar:      person.Icon.URL,
-						Description: person.Summary,
-						Link:        person.URL,
+						Avatar:      person.MustGetString("icon.url"),
+						Description: person.MustGetString("summary"),
+						Link:        person.MustGetString("url"),
 					},
 					Emojis:               &emojis,
 					ReplyToMessageID:     ReplyToMessageID,
 					ReplyToMessageAuthor: ReplyToMessageAuthor,
 				},
 				Meta: map[string]interface{}{
-					"apActor":          person.URL,
+					"apActor":          person.MustGetString("url"),
 					"apObjectRef":      object.ID,
-					"apPublisherInbox": person.Inbox,
+					"apPublisherInbox": person.MustGetString("inbox"),
 					"visibility":       visibility,
 				},
 				SignedAt:     date,

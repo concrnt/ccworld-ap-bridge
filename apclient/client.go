@@ -97,24 +97,22 @@ func (c ApClient) FetchNote(ctx context.Context, noteID string, execEntity types
 }
 
 // FetchPerson fetches a person from remote ap server.
-func (c ApClient) FetchPerson(ctx context.Context, actor string, execEntity *types.ApEntity) (types.ApObject, error) {
+func (c ApClient) FetchPerson(ctx context.Context, actor string, execEntity *types.ApEntity) (*types.RawApObj, error) {
 	_, span := tracer.Start(ctx, "FetchPerson")
 	defer span.End()
 
 	// try cache
 	cache, err := c.mc.Get(actor)
 	if err == nil {
-		person := types.ApObject{}
-		err = json.Unmarshal(cache.Value, &person)
+		person, err := types.LoadAsRawApObj(string(cache.Value))
 		if err == nil {
 			return person, nil
 		}
 	}
 
-	var person types.ApObject
 	req, err := http.NewRequest("GET", actor, nil)
 	if err != nil {
-		return person, err
+		return nil, err
 	}
 	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 	req.Header.Set("Accept", "application/activity+json")
@@ -127,7 +125,7 @@ func (c ApClient) FetchPerson(ctx context.Context, actor string, execEntity *typ
 		priv, err := c.store.LoadKey(ctx, *execEntity)
 		if err != nil {
 			log.Println(err)
-			return person, err
+			return nil, err
 		}
 
 		prefs := []httpsig.Algorithm{httpsig.RSA_SHA256}
@@ -136,30 +134,31 @@ func (c ApClient) FetchPerson(ctx context.Context, actor string, execEntity *typ
 		signer, _, err := httpsig.NewSigner(prefs, digestAlgorithm, headersToSign, httpsig.Signature, 0)
 		if err != nil {
 			log.Println(err)
-			return person, err
+			return nil, err
 		}
 		err = signer.SignRequest(priv, "https://"+c.config.FQDN+"/ap/acct/"+execEntity.ID+"#main-key", req, nil)
 		if err != nil {
 			log.Println(err)
-			return person, err
+			return nil, err
 		}
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return person, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 
-	err = json.Unmarshal(body, &person)
+	person, err := types.LoadAsRawApObj(string(body))
 	if err != nil {
+		log.Println(err)
 		return person, err
 	}
 
 	// cache
-	personBytes, err := json.Marshal(person)
+	personBytes, err := json.Marshal(person.GetData())
 	if err == nil {
 		c.mc.Set(&memcache.Item{
 			Key:        actor,
