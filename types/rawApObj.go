@@ -48,10 +48,20 @@ func (r *RawApObj) GetRaw(key string) (*RawApObj, bool) {
 	}
 
 	if arr, ok := value.([]any); ok {
-		return &RawApObj{arr[0].(map[string]any)}, true
+		scalar, ok := arr[0].(map[string]any)
+		if !ok {
+			core.JsonPrint("failed to convert raw to map", arr[0])
+			return nil, false
+		}
+		return &RawApObj{scalar}, true
 	}
 
-	return &RawApObj{value.(map[string]any)}, true
+	scalar, ok := value.(map[string]any)
+	if !ok {
+		core.JsonPrint("failed to convert raw to map", value)
+		return nil, false
+	}
+	return &RawApObj{scalar}, true
 }
 
 func (r *RawApObj) MustGetRaw(key string) *RawApObj {

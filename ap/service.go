@@ -978,12 +978,12 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 	case "Delete":
 		deleteObject, ok := object.GetRaw("object")
 		if !ok {
-			jsonPrint("Delete Object", object)
+			jsonPrint("Delete Object", object.GetData())
 			return types.ApObject{}, errors.New("ap/service/inbox/delete Invalid Delete Object")
 		}
 		deleteID, ok := deleteObject.GetString("id")
 		if !ok {
-			jsonPrint("Delete Object", object)
+			jsonPrint("Delete Object", object.GetData())
 			return types.ApObject{}, errors.New("ap/service/inbox/delete Invalid Delete Object")
 		}
 
