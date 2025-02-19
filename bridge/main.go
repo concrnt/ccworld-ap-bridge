@@ -66,12 +66,8 @@ func (s Service) NoteToMessage(ctx context.Context, object *types.RawApObj, pers
 		}
 	}
 
-	if len(content) == 0 {
-		return core.Message{}, errors.New("empty note")
-	}
-
 	if len(content) > 4096 {
-		return core.Message{}, errors.New("note too long")
+		content = content[:4096]
 	}
 
 	contentWithImage := content
@@ -172,6 +168,11 @@ CHECK_VISIBILITY:
 	var RerouteMessageAuthor string
 
 	if object.MustGetString("inReplyTo") != "" {
+
+		if len(content) == 0 {
+			return core.Message{}, errors.New("empty content")
+		}
+
 		if strings.HasPrefix(object.MustGetString("inReplyTo"), "https://"+s.config.FQDN+"/ap/note/") {
 			replyToMessageID := strings.TrimPrefix(object.MustGetString("inReplyTo"), "https://"+s.config.FQDN+"/ap/note/")
 			message, err := s.client.GetMessage(ctx, s.config.FQDN, replyToMessageID, nil)
@@ -223,6 +224,11 @@ CHECK_VISIBILITY:
 			return core.Message{}, errors.Wrap(err, "json marshal error")
 		}
 	} else if object.MustGetString("quoteUrl") != "" {
+
+		if len(content) == 0 {
+			return core.Message{}, errors.New("empty content")
+		}
+
 		if strings.HasPrefix(object.MustGetString("quoteUrl"), "https://"+s.config.FQDN+"/ap/note/") {
 			replyToMessageID := strings.TrimPrefix(object.MustGetString("quoteUrl"), "https://"+s.config.FQDN+"/ap/note/")
 			message, err := s.client.GetMessage(ctx, s.config.FQDN, replyToMessageID, nil)
@@ -328,6 +334,11 @@ CHECK_VISIBILITY:
 				return core.Message{}, errors.Wrap(err, "json marshal error")
 			}
 		} else {
+
+			if len(content) == 0 {
+				return core.Message{}, errors.New("empty content")
+			}
+
 			doc := core.MessageDocument[world.MarkdownMessage]{
 				DocumentBase: core.DocumentBase[world.MarkdownMessage]{
 					Signer: s.config.ProxyCCID,
