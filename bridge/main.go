@@ -282,9 +282,15 @@ CHECK_VISIBILITY:
 			if attachment.MustGetBool("sensitive") {
 				flag = "sensitive"
 			}
+
+			mediaType := attachment.MustGetString("mediaType")
+			if mediaType == "" {
+				mediaType = "image/png"
+			}
+
 			media = append(media, world.Media{
 				MediaURL:  attachment.MustGetString("url"),
-				MediaType: attachment.MustGetString("mediaType"),
+				MediaType: mediaType,
 				Flag:      flag,
 			})
 		}
