@@ -165,11 +165,13 @@ CHECK_VISIBILITY:
 	}
 
 	var document []byte
+
+	var ReplyToMessageID string
+	var ReplyToMessageAuthor string
+	var RerouteMessageID string
+	var RerouteMessageAuthor string
+
 	if object.MustGetString("inReplyTo") != "" {
-
-		var ReplyToMessageID string
-		var ReplyToMessageAuthor string
-
 		if strings.HasPrefix(object.MustGetString("inReplyTo"), "https://"+s.config.FQDN+"/ap/note/") {
 			replyToMessageID := strings.TrimPrefix(object.MustGetString("inReplyTo"), "https://"+s.config.FQDN+"/ap/note/")
 			message, err := s.client.GetMessage(ctx, s.config.FQDN, replyToMessageID, nil)
@@ -221,9 +223,6 @@ CHECK_VISIBILITY:
 			return core.Message{}, errors.Wrap(err, "json marshal error")
 		}
 	} else if object.MustGetString("quoteUrl") != "" {
-		var RerouteMessageID string
-		var RerouteMessageAuthor string
-
 		if strings.HasPrefix(object.MustGetString("quoteUrl"), "https://"+s.config.FQDN+"/ap/note/") {
 			replyToMessageID := strings.TrimPrefix(object.MustGetString("quoteUrl"), "https://"+s.config.FQDN+"/ap/note/")
 			message, err := s.client.GetMessage(ctx, s.config.FQDN, replyToMessageID, nil)
@@ -395,6 +394,97 @@ CHECK_VISIBILITY:
 	_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), &created, nil)
 	if err != nil {
 		return core.Message{}, err
+	}
+
+	var assDocument []byte
+	if ReplyToMessageID != "" && ReplyToMessageAuthor != "" {
+		assDoc := core.AssociationDocument[world.ReplyAssociation]{
+			DocumentBase: core.DocumentBase[world.ReplyAssociation]{
+				Signer: s.config.ProxyCCID,
+				Owner:  ReplyToMessageAuthor,
+				Type:   "association",
+				Schema: world.ReplyAssociationSchema,
+				Body: world.ReplyAssociation{
+					MessageID:     created.Content.ID,
+					MessageAuthor: created.Content.Author,
+					ProfileOverride: &world.ProfileOverride{
+						Username:    username,
+						Avatar:      person.MustGetString("icon.url"),
+						Description: person.MustGetString("summary"),
+						Link:        object.MustGetString("actor"),
+					},
+				},
+				SignedAt: date,
+			},
+			Target:    ReplyToMessageID,
+			Timelines: []string{world.UserNotifyStream + "@" + ReplyToMessageAuthor},
+		}
+		assDocument, err = json.Marshal(assDoc)
+		if err != nil {
+			return core.Message{}, errors.Wrap(err, "json marshal error")
+		}
+	}
+
+	if RerouteMessageID != "" && RerouteMessageAuthor != "" {
+		assDoc := core.AssociationDocument[world.RerouteAssociation]{
+			DocumentBase: core.DocumentBase[world.RerouteAssociation]{
+				Signer: s.config.ProxyCCID,
+				Owner:  RerouteMessageAuthor,
+				Type:   "association",
+				Schema: world.RerouteAssociationSchema,
+				Body: world.RerouteAssociation{
+					MessageID:     created.Content.ID,
+					MessageAuthor: created.Content.Author,
+					ProfileOverride: &world.ProfileOverride{
+						Username:    username,
+						Avatar:      person.MustGetString("icon.url"),
+						Description: person.MustGetString("summary"),
+						Link:        object.MustGetString("actor"),
+					},
+				},
+				SignedAt: date,
+			},
+			Target:    RerouteMessageID,
+			Timelines: []string{world.UserNotifyStream + "@" + RerouteMessageAuthor},
+		}
+		assDocument, err = json.Marshal(assDoc)
+		if err != nil {
+			return core.Message{}, errors.Wrap(err, "json marshal error")
+		}
+	}
+
+	if len(assDocument) > 0 {
+		signatureBytes, err := core.SignBytes(assDocument, s.config.ProxyPriv)
+		if err != nil {
+			return core.Message{}, errors.Wrap(err, "sign error")
+		}
+
+		signature := hex.EncodeToString(signatureBytes)
+
+		opt := commitStore.CommitOption{
+			IsEphemeral: true,
+		}
+
+		option, err := json.Marshal(opt)
+		if err != nil {
+			return core.Message{}, errors.Wrap(err, "json marshal error")
+		}
+
+		commitObj := core.Commit{
+			Document:  string(assDocument),
+			Signature: string(signature),
+			Option:    string(option),
+		}
+
+		commit, err := json.Marshal(commitObj)
+		if err != nil {
+			return core.Message{}, errors.Wrap(err, "json marshal error")
+		}
+
+		_, err = s.client.Commit(ctx, s.config.FQDN, string(commit), &core.Association{}, nil)
+		if err != nil {
+			return core.Message{}, err
+		}
 	}
 
 	return created.Content, nil
