@@ -314,7 +314,7 @@ func (s *Service) ResolvePerson(ctx context.Context, id, requester string) (any,
 		return nil, err
 	}
 
-	if strings.Contains(id, "@") {
+	if !strings.HasPrefix(id, "https://") {
 		id, err = apclient.ResolveActor(ctx, id)
 		if err != nil {
 			span.RecordError(err)
