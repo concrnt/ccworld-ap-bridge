@@ -51,6 +51,14 @@ type LikeAssociation struct {
 	ProfileOverride *ProfileOverride `json:"profileOverride"`
 }
 
+type CommunityTimeline struct {
+	Name        string `json:"name"`
+	Shortname   string `json:"shortname"`
+	Description string `json:"description"`
+	Icon        string `json:"icon"`
+	Banner      string `json:"banner"`
+}
+
 type ReplyAssociation struct {
 	MessageID       string           `json:"messageId"`
 	MessageAuthor   string           `json:"messageAuthor"`

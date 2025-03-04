@@ -523,8 +523,8 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 		return types.ApObject{}, errors.New("invalid payload")
 	}
 
-	var emojis []types.Tag
-	var images []string
+	images := []string{}
+	tags := []types.Tag{}
 
 	text := document.Body.Body
 
@@ -538,6 +538,49 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 	if document.Body.Medias != nil {
 		for _, media := range *document.Body.Medias {
 			images = append(images, media.MediaURL)
+		}
+	}
+
+	// extract hash tags
+	hashTagPattern := regexp.MustCompile(`#[^#\s]+`)
+	hashTagMatches := hashTagPattern.FindAllString(text, -1)
+	for _, match := range hashTagMatches {
+		fmt.Println("found hashtag", match)
+		if strings.Contains(match, "@") {
+
+			timelineFQID := strings.TrimPrefix(match, "#")
+			split := strings.Split(timelineFQID, "@")
+			if len(split) != 2 {
+				continue
+			}
+			timelineDocument, err := s.client.GetTimeline(ctx, split[1], timelineFQID, nil)
+			if err != nil {
+				span.RecordError(err)
+				continue
+			}
+
+			var timeline core.TimelineDocument[world.CommunityTimeline]
+			err = json.Unmarshal([]byte(timelineDocument.Document), &timeline)
+			if err != nil {
+				span.RecordError(err)
+				continue
+			}
+
+			tag := types.Tag{
+				Type: "Hashtag",
+				Name: timeline.Body.Name,
+				// Href: "https://concrnt.world/timelines/" + strings.TrimPrefix(match, "#"),
+			}
+			tags = append(tags, tag)
+
+			text = strings.ReplaceAll(text, match, "#"+timeline.Body.Name)
+
+		} else {
+			tag := types.Tag{
+				Type: "Hashtag",
+				Name: match,
+			}
+			tags = append(tags, tag)
 		}
 	}
 
@@ -557,7 +600,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 					URL:       v.ImageURL,
 				},
 			}
-			emojis = append(emojis, emoji)
+			tags = append(tags, emoji)
 		}
 	}
 
@@ -609,7 +652,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 			MisskeyContent: text,
 			Published:      document.SignedAt.Format(time.RFC3339),
 			To:             []string{"https://www.w3.org/ns/activitystreams#Public"},
-			Tag:            emojis,
+			Tag:            tags,
 			Attachment:     attachments,
 		}, nil
 
@@ -653,7 +696,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 		replyToActor, ok := replyMeta["apActor"].(string)
 		if ok {
 			CC = []string{replyToActor}
-			emojis = append(emojis, types.Tag{
+			tags = append(tags, types.Tag{
 				Type: "Mention",
 				Href: replyToActor,
 			})
@@ -672,7 +715,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 			InReplyTo:      ref,
 			To:             []string{"https://www.w3.org/ns/activitystreams#Public"},
 			CC:             CC,
-			Tag:            emojis,
+			Tag:            tags,
 			Attachment:     attachments,
 		}, nil
 
