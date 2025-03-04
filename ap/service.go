@@ -207,7 +207,7 @@ func (s *Service) User(ctx context.Context, id string) (types.ApObject, error) {
 		Name:              profileDocument.Body.Username,
 		Summary:           profileDocument.Body.Description,
 		URL:               "https://" + s.config.FQDN + "/ap/acct/" + id,
-		Icon: types.Icon{
+		Icon: &types.Icon{
 			Type:      "Image",
 			MediaType: "image/png",
 			URL:       profileDocument.Body.Avatar,
@@ -248,7 +248,7 @@ func (s *Service) Note(ctx context.Context, id string) (types.ApObject, error) {
 	return note, nil
 }
 
-func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId string, request *http.Request) (types.ApObject, error) {
+func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId string, request *http.Request) (types.ApObject, error) {
 	ctx, span := tracer.Start(ctx, "Ap.Service.Inbox")
 	defer span.End()
 
@@ -281,12 +281,12 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/follow FetchPerson")
 	}
 
-	pubkey := requester.PublicKey
+	pubkey, _ := requester.GetRaw("publicKey")
 	if pubkey == nil {
 		span.RecordError(err)
 		return types.ApObject{}, errors.New("ap/service/inbox PublicKey not found: " + keyid)
 	}
-	pemStr := pubkey.PublicKeyPem
+	pemStr := pubkey.MustGetString("publicKeyPem")
 
 	pemBytes := []byte(pemStr)
 
@@ -316,11 +316,11 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		return types.ApObject{}, errors.Wrap(err, "ap/service/inbox Verify")
 	}
 
-	switch object.Type {
+	switch object.MustGetString("type") {
 	case "Follow":
 		id := inboxId
 		if id == "" {
-			toStr, ok := object.To.(string)
+			toStr, ok := object.GetString("to")
 			if !ok {
 				return types.ApObject{}, errors.New("ap/service/inbox/follow Invalid Follow ID")
 			}
@@ -336,30 +336,30 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/follow GetEntityByID")
 		}
 
-		requester, err := s.apclient.FetchPerson(ctx, object.Actor, &entity)
+		requester, err := s.apclient.FetchPerson(ctx, object.MustGetString("actor"), &entity)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/follow FetchPerson")
 		}
 		accept := types.ApObject{
 			Context: "https://www.w3.org/ns/activitystreams",
-			ID:      "https://" + s.config.FQDN + "/ap/acct/" + id + "/follows/" + url.PathEscape(requester.ID),
+			ID:      "https://" + s.config.FQDN + "/ap/acct/" + id + "/follows/" + url.PathEscape(requester.MustGetString("id")),
 			Type:    "Accept",
 			Actor:   "https://" + s.config.FQDN + "/ap/acct/" + id,
-			Object:  object,
+			Object:  object.GetData(),
 		}
 
-		split := strings.Split(object.Object.(string), "/")
+		split := strings.Split(object.MustGetString("object"), "/")
 		userID := split[len(split)-1]
 
-		err = s.apclient.PostToInbox(ctx, requester.Inbox, accept, entity)
+		err = s.apclient.PostToInbox(ctx, requester.MustGetString("inbox"), accept, entity)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/follow PostToInbox")
 		}
 
 		// check follow already exists
-		_, err = s.store.GetFollowerByTuple(ctx, userID, requester.ID)
+		_, err = s.store.GetFollowerByTuple(ctx, userID, requester.MustGetString("id"))
 		if err == nil {
 			log.Println("ap/service/inbox/follow follow already exists")
 			return types.ApObject{}, nil
@@ -367,9 +367,9 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 
 		// save follow
 		err = s.store.SaveFollower(ctx, types.ApFollower{
-			ID:                  object.ID,
-			SubscriberInbox:     requester.Inbox,
-			SubscriberPersonURL: requester.ID,
+			ID:                  object.MustGetString("id"),
+			SubscriberInbox:     requester.MustGetString("inbox"),
+			SubscriberPersonURL: requester.MustGetString("id"),
 			PublisherUserID:     userID,
 		})
 		if err != nil {
@@ -380,7 +380,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		return types.ApObject{}, nil
 
 	case "Like":
-		likeObject, ok := object.Object.(string)
+		likeObject, ok := object.GetString("object")
 		if !ok {
 			return types.ApObject{}, errors.New("ap/service/inbox/like Invalid Like Object")
 		}
@@ -410,7 +410,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		}
 
 		err = s.store.CreateApObjectReference(ctx, types.ApObjectReference{
-			ApObjectID: object.ID,
+			ApObjectID: object.MustGetString("id"),
 			CcObjectID: "",
 		})
 
@@ -425,25 +425,21 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like GetEntityByCCID")
 		}
 
-		person, err := s.apclient.FetchPerson(ctx, object.Actor, &entity)
+		person, err := s.apclient.FetchPerson(ctx, object.MustGetString("actor"), &entity)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like FetchPerson")
 		}
 
-		username := person.Name
+		username := person.MustGetString("name")
 		if len(username) == 0 {
-			username = person.PreferredUsername
+			username = person.MustGetString("preferredUsername")
 		}
 
-		var tag *types.Tag
-		tags, err := types.ParseTags(object.Tag)
-		if err == nil {
-			tag = &tags[0]
-		}
+		tag, _ := object.GetRaw("tag")
 
 		var document []byte
-		if (tag == nil) || (tag.Name[0] != ':') {
+		if (tag == nil) || (tag.MustGetString("name")[0] != ':') {
 			doc := core.AssociationDocument[world.LikeAssociation]{
 				DocumentBase: core.DocumentBase[world.LikeAssociation]{
 					Signer: s.config.ProxyCCID,
@@ -453,13 +449,13 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 					Body: world.LikeAssociation{
 						ProfileOverride: &world.ProfileOverride{
 							Username:    username,
-							Avatar:      person.Icon.URL,
-							Description: person.Summary,
-							Link:        object.Actor,
+							Avatar:      person.MustGetString("icon.url"),
+							Description: person.MustGetString("summary"),
+							Link:        object.MustGetString("actor"),
 						},
 					},
 					Meta: map[string]interface{}{
-						"apActor": object.Actor,
+						"apActor": object.MustGetString("actor"),
 					},
 					SignedAt: time.Now(),
 				},
@@ -481,22 +477,22 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 					Type:   "association",
 					Schema: world.ReactionAssociationSchema,
 					Body: world.ReactionAssociation{
-						Shortcode: tag.Name,
-						ImageURL:  tag.Icon.URL,
+						Shortcode: tag.MustGetString("name"),
+						ImageURL:  tag.MustGetString("icon.url"),
 						ProfileOverride: &world.ProfileOverride{
 							Username:    username,
-							Avatar:      person.Icon.URL,
-							Description: person.Summary,
-							Link:        object.Actor,
+							Avatar:      person.MustGetString("icon.url"),
+							Description: person.MustGetString("summary"),
+							Link:        object.MustGetString("actor"),
 						},
 					},
 					Meta: map[string]interface{}{
-						"apActor": object.Actor,
+						"apActor": object.MustGetString("actor"),
 					},
 					SignedAt: time.Now(),
 				},
 				Target:  targetID,
-				Variant: tag.Icon.URL,
+				Variant: tag.MustGetString("icon.url"),
 				Timelines: []string{
 					world.UserNotifyStream + "@" + targetMsg.Author,
 				},
@@ -547,22 +543,22 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 
 		// save reference
 		err = s.store.UpdateApObjectReference(ctx, types.ApObjectReference{
-			ApObjectID: object.ID,
+			ApObjectID: object.MustGetString("id"),
 			CcObjectID: created.Content.ID,
 		})
 
 		return types.ApObject{}, nil
 
 	case "Create":
-		createObject, ok := object.Object.(map[string]interface{})
+		createObject, ok := object.GetRaw("object")
 		if !ok {
 			return types.ApObject{}, errors.New("ap/service/inbox/create Invalid Create Object")
 		}
-		createType, ok := createObject["type"].(string)
+		createType, ok := createObject.GetString("type")
 		if !ok {
 			return types.ApObject{}, errors.New("ap/service/inbox/create Invalid Create Object")
 		}
-		createID, ok := createObject["id"].(string)
+		createID, ok := createObject.GetString("id")
 		if !ok {
 			return types.ApObject{}, errors.New("ap/service/inbox/create Invalid Create Object")
 		}
@@ -587,15 +583,32 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 				return types.ApObject{}, nil
 			}
 
+			destStreams := []string{}
+
+			// list up to and ccs
+			to, _ := createObject.GetStringSlice("to")
+			cc, _ := createObject.GetStringSlice("cc")
+			for _, recipient := range append(to, cc...) {
+				if strings.HasPrefix(recipient, "https://"+s.config.FQDN+"/ap/acct/") {
+					recipient = strings.TrimPrefix(recipient, "https://"+s.config.FQDN+"/ap/acct/")
+					entity, err := s.store.GetEntityByID(ctx, recipient)
+					if err != nil {
+						log.Println("ap/service/inbox/create GetEntityByID", err)
+						span.RecordError(err)
+						continue
+					}
+					destStreams = append(destStreams, world.UserApStream+"@"+entity.CCID)
+				}
+			}
+
 			// list up follows
-			follows, err := s.store.GetFollowsByPublisher(ctx, object.Actor)
+			follows, err := s.store.GetFollowsByPublisher(ctx, object.MustGetString("actor"))
 			if err != nil {
 				span.RecordError(err)
 				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/create GetFollowsByPublisher")
 			}
 
 			var rep types.ApEntity
-			destStreams := []string{}
 			for _, follow := range follows {
 				entity, err := s.store.GetEntityByID(ctx, follow.SubscriberUserID)
 				if err != nil {
@@ -612,27 +625,26 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 				return types.ApObject{}, nil
 			}
 
-			person, err := s.apclient.FetchPerson(ctx, object.Actor, &rep)
+			var uniqDestStreams []string
+			uniqMap := map[string]struct{}{}
+			for _, destStream := range destStreams {
+				if _, ok := uniqMap[destStream]; !ok {
+					uniqMap[destStream] = struct{}{}
+					uniqDestStreams = append(uniqDestStreams, destStream)
+				}
+			}
+
+			person, err := s.apclient.FetchPerson(ctx, object.MustGetString("actor"), &rep)
 			if err != nil {
 				span.RecordError(err)
 				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/create FetchPerson")
 			}
 
-			// convertObject
-			noteBytes, err := json.Marshal(createObject)
+			created, err := s.bridge.NoteToMessage(ctx, createObject, person, uniqDestStreams)
 			if err != nil {
 				span.RecordError(err)
-				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/create Marshal")
+				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/create NoteToMessage")
 			}
-
-			var note types.ApObject
-			err = json.Unmarshal(noteBytes, &note)
-			if err != nil {
-				span.RecordError(err)
-				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/create Unmarshal")
-			}
-
-			created, err := s.bridge.NoteToMessage(ctx, note, person, destStreams)
 
 			// save reference
 			err = s.store.UpdateApObjectReference(ctx, types.ApObjectReference{
@@ -653,12 +665,12 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		}
 
 	case "Announce":
-		announceObject, ok := object.Object.(string)
+		announceObject, ok := object.GetString("object") //object.Object.(string)
 		if !ok {
 			return types.ApObject{}, errors.New("ap/service/inbox/announce Invalid Announce Object")
 		}
 		// check if the note is already exists
-		_, err := s.store.GetApObjectReferenceByCcObjectID(ctx, object.ID)
+		_, err := s.store.GetApObjectReferenceByCcObjectID(ctx, object.MustGetString("id"))
 		if err == nil {
 			// already exists
 			log.Println("ap/service/inbox/announce note already exists")
@@ -667,7 +679,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 
 		// preserve reference
 		err = s.store.CreateApObjectReference(ctx, types.ApObjectReference{
-			ApObjectID: object.ID,
+			ApObjectID: object.MustGetString("id"),
 			CcObjectID: "",
 		})
 
@@ -677,7 +689,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		}
 
 		// list up follows
-		follows, err := s.store.GetFollowsByPublisher(ctx, object.Actor)
+		follows, err := s.store.GetFollowsByPublisher(ctx, object.MustGetString("actor"))
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/announce GetFollowsByPublisher")
@@ -701,7 +713,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			return types.ApObject{}, nil
 		}
 
-		person, err := s.apclient.FetchPerson(ctx, object.Actor, &rep)
+		person, err := s.apclient.FetchPerson(ctx, object.MustGetString("actor"), &rep)
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/announce FetchPerson")
@@ -727,7 +739,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			}
 
 			// save person
-			person, err := s.apclient.FetchPerson(ctx, note.AttributedTo, &rep)
+			person, err := s.apclient.FetchPerson(ctx, note.MustGetString("attributedTo"), &rep)
 			if err != nil {
 				span.RecordError(err)
 				return types.ApObject{}, err
@@ -751,9 +763,9 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			}
 		}
 
-		username := person.Name
+		username := person.MustGetString("name")
 		if len(username) == 0 {
-			username = person.PreferredUsername
+			username = person.MustGetString("preferredUsername")
 		}
 
 		doc := core.MessageDocument[world.RerouteMessage]{
@@ -765,18 +777,18 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 				Body: world.RerouteMessage{
 					RerouteMessageID:     sourceMessage.ID,
 					RerouteMessageAuthor: sourceMessage.Author,
-					Body:                 object.Content,
+					Body:                 object.MustGetString("content"),
 					ProfileOverride: &world.ProfileOverride{
 						Username:    username,
-						Avatar:      person.Icon.URL,
-						Description: person.Summary,
-						Link:        person.URL,
+						Avatar:      person.MustGetString("icon.url"),
+						Description: person.MustGetString("summary"),
+						Link:        object.MustGetString("actor"),
 					},
 				},
 				Meta: map[string]interface{}{
-					"apActor":          person.URL,
-					"apObject":         object.ID,
-					"apPublisherInbox": person.Inbox,
+					"apActor":          person.MustGetString("url"),
+					"apObject":         object.MustGetString("id"),
+					"apPublisherInbox": person.MustGetString("inbox"),
 				},
 			},
 			Timelines: destStreams,
@@ -827,24 +839,24 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 
 		// save reference
 		err = s.store.UpdateApObjectReference(ctx, types.ApObjectReference{
-			ApObjectID: object.ID,
+			ApObjectID: object.MustGetString("id"),
 			CcObjectID: created.Content.ID,
 		})
 
 		return types.ApObject{}, nil
 
 	case "Accept":
-		acceptObject, ok := object.Object.(map[string]interface{})
+		acceptObject, ok := object.GetRaw("object")
 		if !ok {
 			return types.ApObject{}, errors.New("ap/service/inbox/accept Invalid Accept Object")
 		}
-		acceptType, ok := acceptObject["type"].(string)
+		acceptType, ok := acceptObject.GetString("type")
 		if !ok {
 			return types.ApObject{}, errors.New("ap/service/inbox/accept Invalid Accept Object")
 		}
 		switch acceptType {
 		case "Follow":
-			objectID, ok := acceptObject["id"].(string)
+			objectID, ok := acceptObject.GetString("id")
 			if !ok {
 				return types.ApObject{}, errors.New("ap/service/inbox/accept Invalid Accept Object")
 			}
@@ -870,23 +882,23 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 		}
 
 	case "Undo":
-		undoObject, ok := object.Object.(map[string]interface{})
+		undoObject, ok := object.GetRaw("object")
 		if !ok {
 			return types.ApObject{}, errors.New("ap/service/inbox/undo Invalid Undo Object")
 		}
-		undoType, ok := undoObject["type"].(string)
+		undoType, ok := undoObject.GetString("type")
 		if !ok {
 			return types.ApObject{}, errors.New("ap/service/inbox/undo Invalid Undo Object")
 		}
 		switch undoType {
 		case "Follow":
 
-			remote, ok := undoObject["actor"].(string)
+			remote, ok := undoObject.GetString("actor")
 			if !ok {
 				return types.ApObject{}, errors.New("ap/service/inbox/undo/follow Invalid Undo Object")
 			}
 
-			obj, ok := undoObject["object"].(string)
+			obj, ok := undoObject.GetString("object")
 			if !ok {
 				return types.ApObject{}, errors.New("ap/service/inbox/undo/follow Invalid Undo Object")
 			}
@@ -907,7 +919,7 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			return types.ApObject{}, nil
 
 		case "Like":
-			likeID, ok := undoObject["id"].(string)
+			likeID, ok := undoObject.GetString("id")
 			if !ok {
 				return types.ApObject{}, errors.New("ap/service/inbox/undo/like Invalid Undo Object")
 			}
@@ -981,14 +993,14 @@ func (s *Service) Inbox(ctx context.Context, object types.ApObject, inboxId stri
 			return types.ApObject{}, nil
 		}
 	case "Delete":
-		deleteObject, ok := object.Object.(map[string]interface{})
+		deleteObject, ok := object.GetRaw("object")
 		if !ok {
-			jsonPrint("Delete Object", object)
+			jsonPrint("Delete Object", object.GetData())
 			return types.ApObject{}, errors.New("ap/service/inbox/delete Invalid Delete Object")
 		}
-		deleteID, ok := deleteObject["id"].(string)
+		deleteID, ok := deleteObject.GetString("id")
 		if !ok {
-			jsonPrint("Delete Object", object)
+			jsonPrint("Delete Object", object.GetData())
 			return types.ApObject{}, errors.New("ap/service/inbox/delete Invalid Delete Object")
 		}
 

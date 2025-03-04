@@ -76,6 +76,7 @@ func (s *Service) Follow(ctx context.Context, requester, targetID string) (types
 
 	targetPerson, err := s.apclient.FetchPerson(ctx, targetActor, &entity)
 	if err != nil {
+		log.Println("fetch person error", err)
 		span.RecordError(err)
 		return types.ApFollow{}, err
 	}
@@ -88,11 +89,11 @@ func (s *Service) Follow(ctx context.Context, requester, targetID string) (types
 		Context: "https://www.w3.org/ns/activitystreams",
 		Type:    "Follow",
 		Actor:   "https://" + s.config.FQDN + "/ap/acct/" + entity.ID,
-		Object:  targetPerson.ID,
+		Object:  targetPerson.MustGetString("id"),
 		ID:      followID,
 	}
 
-	err = s.apclient.PostToInbox(ctx, targetPerson.Inbox, followObject, entity)
+	err = s.apclient.PostToInbox(ctx, targetPerson.MustGetString("inbox"), followObject, entity)
 	if err != nil {
 		log.Println("post to inbox error", err)
 		span.RecordError(err)
@@ -101,7 +102,7 @@ func (s *Service) Follow(ctx context.Context, requester, targetID string) (types
 
 	follow := types.ApFollow{
 		ID:                 followID,
-		PublisherPersonURL: targetPerson.ID,
+		PublisherPersonURL: targetPerson.MustGetString("id"),
 		SubscriberUserID:   entity.ID,
 	}
 
@@ -152,7 +153,7 @@ func (s *Service) UnFollow(ctx context.Context, requester, targetID string) (typ
 			Type:    "Follow",
 			ID:      followID,
 			Actor:   "https://" + s.config.FQDN + "/ap/acct/" + entity.ID,
-			Object:  targetPerson.ID,
+			Object:  targetPerson.MustGetString("id"),
 		},
 	}
 
@@ -164,7 +165,7 @@ func (s *Service) UnFollow(ctx context.Context, requester, targetID string) (typ
 	}
 	log.Println(string(undoJSON))
 
-	err = s.apclient.PostToInbox(ctx, targetPerson.Inbox, undoObject, entity)
+	err = s.apclient.PostToInbox(ctx, targetPerson.MustGetString("inbox"), undoObject, entity)
 	if err != nil {
 		span.RecordError(err)
 		return types.ApFollow{}, err
@@ -303,31 +304,32 @@ func (s *Service) GetStats(ctx context.Context, id string) (types.AccountStats, 
 	return stats, nil
 }
 
-func (s *Service) ResolvePerson(ctx context.Context, id, requester string) (types.ApObject, error) {
+func (s *Service) ResolvePerson(ctx context.Context, id, requester string) (any, error) {
 	ctx, span := tracer.Start(ctx, "Api.Service.ResolvePerson")
 	defer span.End()
 
 	entity, err := s.store.GetEntityByCCID(ctx, requester)
 	if err != nil {
 		span.RecordError(err)
-		return types.ApObject{}, err
+		return nil, err
 	}
 
-	if strings.Contains(id, "@") {
+	if !strings.HasPrefix(id, "https://") {
 		id, err = apclient.ResolveActor(ctx, id)
 		if err != nil {
 			span.RecordError(err)
-			return types.ApObject{}, err
+			return nil, err
 		}
 	}
 
 	person, err := s.apclient.FetchPerson(ctx, id, &entity)
 	if err != nil {
+		log.Println("fetch person error", err)
 		span.RecordError(err)
-		return types.ApObject{}, err
+		return nil, err
 	}
 
-	return person, nil
+	return person.GetData(), nil
 }
 
 func (s *Service) ImportNote(ctx context.Context, noteID, requester string) (core.Message, error) {
@@ -358,7 +360,7 @@ func (s *Service) ImportNote(ctx context.Context, noteID, requester string) (cor
 	}
 
 	// save person
-	person, err := s.apclient.FetchPerson(ctx, note.AttributedTo, &entity)
+	person, err := s.apclient.FetchPerson(ctx, note.MustGetString("attributedTo"), &entity)
 	if err != nil {
 		span.RecordError(err)
 		return core.Message{}, err
