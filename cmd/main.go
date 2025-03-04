@@ -176,6 +176,13 @@ func main() {
 	worker := worker.NewWorker(rdb, storeService, client, apclient, bridge, config.ApConfig)
 	go worker.Run()
 
+	e.GET("/cc-info", func(c echo.Context) error {
+		return c.JSON(http.StatusOK, core.CCInfo{
+			Name:    "github.com/concrnt/ccworld-ap-bridge",
+			Version: version,
+		})
+	})
+
 	e.GET("/.well-known/webfinger", apHandler.WebFinger)
 	e.GET("/.well-known/nodeinfo", apHandler.NodeInfoWellKnown)
 
