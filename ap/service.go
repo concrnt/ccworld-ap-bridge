@@ -585,6 +585,7 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 
 			destStreams := []string{}
 
+			var rep types.ApEntity
 			// list up to and ccs
 			to, _ := createObject.GetStringSlice("to")
 			cc, _ := createObject.GetStringSlice("cc")
@@ -597,6 +598,9 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 						span.RecordError(err)
 						continue
 					}
+					if rep.ID == "" {
+						rep = entity
+					}
 					destStreams = append(destStreams, world.UserApStream+"@"+entity.CCID)
 				}
 			}
@@ -608,7 +612,6 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 				return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/create GetFollowsByPublisher")
 			}
 
-			var rep types.ApEntity
 			for _, follow := range follows {
 				entity, err := s.store.GetEntityByID(ctx, follow.SubscriberUserID)
 				if err != nil {
@@ -616,7 +619,9 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 					span.RecordError(err)
 					continue
 				}
-				rep = entity
+				if rep.ID == "" {
+					rep = entity
+				}
 				destStreams = append(destStreams, world.UserApStream+"@"+entity.CCID)
 			}
 
