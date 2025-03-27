@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"regexp"
 	"slices"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/gomarkdown/markdown/parser"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
+	xhtml "golang.org/x/net/html"
 
 	"github.com/concrnt/ccworld-ap-bridge/apclient"
 	"github.com/concrnt/ccworld-ap-bridge/store"
@@ -48,11 +50,72 @@ func NewService(
 	}
 }
 
+func htmlToMarkdown(r io.Reader) (string, error) {
+	doc, err := xhtml.Parse(r)
+	if err != nil {
+		return "", err
+	}
+
+	// traverse はノード n を受け取り、変換後の文字列を返す再帰関数です。
+	var traverse func(n *xhtml.Node) string
+	traverse = func(n *xhtml.Node) string {
+		var result strings.Builder
+
+		switch n.Type {
+		case xhtml.TextNode:
+			result.WriteString(n.Data)
+		case xhtml.ElementNode:
+			switch n.Data {
+			case "a":
+				var href string
+				for _, attr := range n.Attr {
+					if attr.Key == "href" {
+						href = attr.Val
+						break
+					}
+				}
+				result.WriteString("[")
+				for c := n.FirstChild; c != nil; c = c.NextSibling {
+					result.WriteString(traverse(c))
+				}
+				result.WriteString(fmt.Sprintf("](%s)", href))
+			case "p":
+				result.WriteString("\n\n")
+				for c := n.FirstChild; c != nil; c = c.NextSibling {
+					result.WriteString(traverse(c))
+				}
+			case "br":
+				result.WriteString("\n")
+			default:
+				for c := n.FirstChild; c != nil; c = c.NextSibling {
+					result.WriteString(traverse(c))
+				}
+			}
+		default:
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				result.WriteString(traverse(c))
+			}
+		}
+		return result.String()
+	}
+
+	return traverse(doc), nil
+}
+
 func (s Service) NoteToMessage(ctx context.Context, object *types.RawApObj, person *types.RawApObj, destStreams []string) (core.Message, error) {
 
 	content, ok := object.GetString("_misskey_content")
 	if !ok {
-		content = object.MustGetString("content")
+		rawcontent := object.MustGetString("content")
+		if rawcontent != "" {
+			var err error
+			content, err = htmlToMarkdown(strings.NewReader(rawcontent))
+			if err != nil {
+				fmt.Println("html to markdown error", err)
+				content = rawcontent
+			}
+		}
+
 	}
 
 	tags, _ := object.GetRawSlice("tag")
