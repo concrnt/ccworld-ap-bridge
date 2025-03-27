@@ -114,8 +114,8 @@ func (s Service) NoteToMessage(ctx context.Context, object *types.RawApObj, pers
 				fmt.Println("html to markdown error", err)
 				content = rawcontent
 			}
+			content = strings.Trim(content, "\n")
 		}
-
 	}
 
 	tags, _ := object.GetRawSlice("tag")
