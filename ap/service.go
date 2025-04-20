@@ -38,15 +38,6 @@ type Service struct {
 	config   types.ApConfig
 }
 
-func printJson(v interface{}) {
-	b, err := json.Marshal(v)
-	if err != nil {
-		fmt.Println("error:", err)
-		return
-	}
-	fmt.Println(string(b))
-}
-
 func createToken(domain, ccid, priv string) (string, error) {
 	token, err := jwt.Create(jwt.Claims{
 		JWTID:          uuid.New().String(),
@@ -75,17 +66,6 @@ func NewService(
 		info,
 		config,
 	}
-}
-
-func jsonPrint(title string, v interface{}) {
-	b, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		fmt.Println("error:", err)
-		return
-	}
-	fmt.Println("----- : " + title + " : -----")
-	fmt.Println(string(b))
-	fmt.Println("--------------------------------")
 }
 
 func (s *Service) WebFinger(ctx context.Context, resource string) (types.WebFinger, error) {
@@ -164,7 +144,6 @@ func (s *Service) GetUserWebURL(ctx context.Context, id string) (string, error) 
 		return "", err
 	}
 	return "https://concrnt.world/" + entity.CCID, nil
-
 }
 
 func (s *Service) User(ctx context.Context, id string) (types.ApObject, error) {
@@ -309,8 +288,8 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 		fmt.Println("keyid", keyid)
 		fmt.Println("pemStr", pemStr)
 
-		jsonPrint("header", request.Header)
-		jsonPrint("object", object)
+		core.JsonPrint("header", request.Header)
+		core.JsonPrint("object", object)
 
 		span.RecordError(err)
 		return types.ApObject{}, errors.Wrap(err, "ap/service/inbox Verify")
@@ -454,7 +433,7 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 							Link:        object.MustGetString("actor"),
 						},
 					},
-					Meta: map[string]interface{}{
+					Meta: map[string]any{
 						"apActor": object.MustGetString("actor"),
 					},
 					SignedAt: time.Now(),
@@ -486,7 +465,7 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 							Link:        object.MustGetString("actor"),
 						},
 					},
-					Meta: map[string]interface{}{
+					Meta: map[string]any{
 						"apActor": object.MustGetString("actor"),
 					},
 					SignedAt: time.Now(),
@@ -790,7 +769,7 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 						Link:        object.MustGetString("actor"),
 					},
 				},
-				Meta: map[string]interface{}{
+				Meta: map[string]any{
 					"apActor":          person.MustGetString("url"),
 					"apObject":         object.MustGetString("id"),
 					"apPublisherInbox": person.MustGetString("inbox"),
@@ -881,7 +860,7 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 			return types.ApObject{}, nil
 		default:
 			// print request body
-			jsonPrint("Unhandled accept object", object)
+			core.JsonPrint("Unhandled accept object", object)
 			return types.ApObject{}, nil
 
 		}
@@ -994,18 +973,18 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 
 		default:
 			// print request body
-			jsonPrint("Unhandled Undo Object", object)
+			core.JsonPrint("Unhandled Undo Object", object)
 			return types.ApObject{}, nil
 		}
 	case "Delete":
 		deleteObject, ok := object.GetRaw("object")
 		if !ok {
-			jsonPrint("Delete Object", object.GetData())
+			core.JsonPrint("Delete Object", object.GetData())
 			return types.ApObject{}, errors.New("ap/service/inbox/delete Invalid Delete Object")
 		}
 		deleteID, ok := deleteObject.GetString("id")
 		if !ok {
-			jsonPrint("Delete Object", object.GetData())
+			core.JsonPrint("Delete Object", object.GetData())
 			return types.ApObject{}, errors.New("ap/service/inbox/delete Invalid Delete Object")
 		}
 
@@ -1075,7 +1054,7 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 
 	default:
 		// print request body
-		jsonPrint("Unhandled Activitypub Object", object)
+		core.JsonPrint("Unhandled Activitypub Object", object)
 		return types.ApObject{}, nil
 	}
 }
