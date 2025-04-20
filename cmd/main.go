@@ -1,10 +1,12 @@
 package main
 
 import (
-	"context"
+	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
@@ -13,16 +15,8 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
-	"github.com/totegamma/concurrent/client"
-	"github.com/totegamma/concurrent/x/auth"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -36,7 +30,10 @@ import (
 	"github.com/concrnt/ccworld-ap-bridge/store"
 	"github.com/concrnt/ccworld-ap-bridge/types"
 	"github.com/concrnt/ccworld-ap-bridge/worker"
+	"github.com/totegamma/concurrent/client"
 	"github.com/totegamma/concurrent/core"
+	"github.com/totegamma/concurrent/util"
+	"github.com/totegamma/concurrent/x/auth"
 )
 
 var (
@@ -49,15 +46,30 @@ var (
 func main() {
 	e := echo.New()
 
-	config := Config{}
-	ConfPath := os.Getenv("CCWORLD_AP_BRIDGE_CONFIG")
-	if ConfPath == "" {
-		ConfPath = "/etc/concrnt/config/apconfig.yaml"
+	configPaths := []string{}
+	configPath := os.Getenv("CCWORLD_AP_BRIDGE_CONFIG")
+	if configPath == "" {
+		configPaths = append(configPaths, configPath)
 	}
-	config.Load(ConfPath)
 
-	log.Print("ConcrntWorld Activitypub Bridge ", version, " starting...")
-	log.Print("ApConfig loaded! Proxy: ", config.ApConfig.ProxyCCID)
+	additional_configs := os.Getenv("CCWORLD_AP_BRIDGE_CONFIGS")
+	if additional_configs != "" {
+		for v := range strings.SplitSeq(additional_configs, ":") {
+			configPaths = append(configPaths, v)
+		}
+	}
+
+	if len(configPaths) == 0 {
+		configPaths = append(configPaths, "./etc/concrnt/config/apconfig.yaml")
+	}
+
+	config, err := util.LoadMultipleYamlFiles[Config](configPaths)
+	if err != nil {
+		slog.Error("Failed to load config: ", slog.String("error", err.Error()))
+	}
+
+	slog.Info(fmt.Sprintf("ConcrntWorld Activitypub Bridge %s starting...", version))
+	slog.Info(fmt.Sprintf("ApConfig loaded! Proxy: %s", config.ApConfig.ProxyCCID))
 
 	config.NodeInfo.Version = "2.0"
 	config.NodeInfo.Software.Name = "ccworld-ap-bridge"
@@ -68,7 +80,7 @@ func main() {
 	e.HideBanner = true
 
 	if config.Server.EnableTrace {
-		cleanup, err := setupTraceProvider(config.Server.TraceEndpoint, config.ApConfig.FQDN+"/ccapi", version)
+		cleanup, err := util.SetupTraceProvider(config.Server.TraceEndpoint, config.ApConfig.FQDN+"/ccapi", version)
 		if err != nil {
 			panic(err)
 		}
@@ -151,7 +163,7 @@ func main() {
 	}
 
 	storeService := store.NewStore(db)
-	client := client.NewClient()
+	client := client.NewClient(config.Server.GatewayAddr)
 	client.SetUserAgent("CCWorld-AP-Bridge", version)
 	if config.Server.ApiAddr != "" {
 		client.RegisterHostRemap(config.ApConfig.FQDN, config.Server.ApiAddr, false)
@@ -232,45 +244,4 @@ func main() {
 	}
 
 	e.Logger.Fatal(e.Start(port))
-}
-
-func setupTraceProvider(endpoint string, serviceName string, serviceVersion string) (func(), error) {
-
-	exporter, err := otlptracehttp.New(
-		context.Background(),
-		otlptracehttp.WithEndpoint(endpoint),
-		otlptracehttp.WithInsecure(),
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	resource := resource.NewWithAttributes(
-		semconv.SchemaURL,
-		semconv.ServiceNameKey.String(serviceName),
-		semconv.ServiceVersionKey.String(serviceVersion),
-	)
-
-	tracerProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter),
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-		sdktrace.WithResource(resource),
-	)
-	otel.SetTracerProvider(tracerProvider)
-
-	propagator := propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	)
-	otel.SetTextMapPropagator(propagator)
-
-	cleanup := func() {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		if err := tracerProvider.Shutdown(ctx); err != nil {
-			log.Printf("Failed to shutdown tracer provider: %v", err)
-		}
-	}
-	return cleanup, nil
 }

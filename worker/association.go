@@ -20,7 +20,7 @@ import (
 )
 
 func createToken(domain, ccid, priv string) (string, error) {
-	token, err := jwt.Create(jwt.Claims{
+	token, err := jwt.Create(core.JwtClaims{
 		JWTID:          uuid.New().String(),
 		IssuedAt:       strconv.FormatInt(time.Now().Unix(), 10),
 		ExpirationTime: strconv.FormatInt(time.Now().Add(5*time.Minute).Unix(), 10),
@@ -79,7 +79,7 @@ func (w *Worker) StartAssociationWorker() {
 				} else {
 					associationStream := world.UserAssocStream + "@" + entity.CCID
 					log.Printf("worker/association lookup %v", associationStream)
-					timeline, err := w.client.GetTimeline(ctx, w.config.FQDN, associationStream, nil)
+					timeline, err := w.client.GetTimeline(ctx, associationStream, &client.Options{Resolver: w.config.FQDN})
 					if err != nil {
 						log.Printf("worker/association GetTimeline: %v", err)
 						continue
@@ -152,7 +152,7 @@ func (w *Worker) StartAssociationWorker() {
 					continue
 				}
 
-				messageAuthor, err := w.client.GetEntity(ctx, w.config.FQDN, association.Owner, nil)
+				messageAuthor, err := w.client.GetEntity(ctx, association.Owner, &client.Options{Resolver: w.config.FQDN})
 				if err != nil {
 					log.Printf("worker/association GetEntity: %v", err)
 					continue
@@ -164,7 +164,8 @@ func (w *Worker) StartAssociationWorker() {
 					continue
 				}
 
-				msg, err := w.client.GetMessage(ctx, messageAuthor.Domain, association.Target, &client.Options{
+				msg, err := w.client.GetMessage(ctx, association.Target, &client.Options{
+					Resolver:  w.config.FQDN,
 					AuthToken: token,
 				})
 				if err != nil {
@@ -179,7 +180,7 @@ func (w *Worker) StartAssociationWorker() {
 					continue
 				}
 
-				msgMeta, ok := messageDoc.Meta.(map[string]interface{})
+				msgMeta, ok := messageDoc.Meta.(map[string]any)
 				ref, ok := msgMeta["apObjectRef"].(string)
 				if !ok {
 					log.Printf("worker/association target Message is not activitypub message")
@@ -256,7 +257,7 @@ func (w *Worker) StartAssociationWorker() {
 					continue
 				}
 
-				targetEntity, err := w.client.GetEntity(ctx, w.config.FQDN, association.Owner, nil)
+				targetEntity, err := w.client.GetEntity(ctx, association.Owner, &client.Options{Resolver: w.config.FQDN})
 				if err != nil {
 					log.Printf("worker/association/delete GetEntityByCCID: %v", err)
 					continue
@@ -268,7 +269,8 @@ func (w *Worker) StartAssociationWorker() {
 					continue
 				}
 
-				target, err := w.client.GetMessage(ctx, targetEntity.Domain, association.Target, &client.Options{
+				target, err := w.client.GetMessage(ctx, association.Target, &client.Options{
+					Resolver:  targetEntity.Domain,
 					AuthToken: token,
 				})
 				if err != nil {

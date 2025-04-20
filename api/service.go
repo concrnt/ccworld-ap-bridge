@@ -344,7 +344,7 @@ func (s *Service) ImportNote(ctx context.Context, noteID, requester string) (cor
 
 	existing, err := s.store.GetApObjectReferenceByApObjectID(ctx, noteID)
 	if err == nil {
-		message, err := s.client.GetMessage(ctx, s.config.FQDN, existing.CcObjectID, nil)
+		message, err := s.client.GetMessage(ctx, existing.CcObjectID, &client.Options{Resolver: s.config.FQDN})
 		if err == nil {
 			return message, nil
 		}

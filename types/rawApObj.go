@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/totegamma/concurrent/core"
+	"github.com/totegamma/concurrent/util"
 )
 
 type RawApObj struct {
@@ -18,7 +18,7 @@ func LoadAsRawApObj(jsonBytes []byte) (*RawApObj, error) {
 }
 
 func (r *RawApObj) Print() {
-	core.JsonPrint("RawApObj", r.data)
+	util.JsonPrint("RawApObj", r.data)
 }
 
 func (r *RawApObj) GetData() map[string]any {
@@ -50,7 +50,7 @@ func (r *RawApObj) GetRaw(key string) (*RawApObj, bool) {
 	if arr, ok := value.([]any); ok {
 		scalar, ok := arr[0].(map[string]any)
 		if !ok {
-			core.JsonPrint("failed to convert raw to map", arr[0])
+			util.JsonPrint("failed to convert raw to map", arr[0])
 			return nil, false
 		}
 		return &RawApObj{scalar}, true
@@ -58,7 +58,7 @@ func (r *RawApObj) GetRaw(key string) (*RawApObj, bool) {
 
 	scalar, ok := value.(map[string]any)
 	if !ok {
-		core.JsonPrint("failed to convert raw to map", value)
+		util.JsonPrint("failed to convert raw to map", value)
 		return nil, false
 	}
 	return &RawApObj{scalar}, true

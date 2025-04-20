@@ -24,6 +24,7 @@ import (
 	"github.com/concrnt/ccworld-ap-bridge/world"
 	"github.com/totegamma/concurrent/client"
 	"github.com/totegamma/concurrent/core"
+	"github.com/totegamma/concurrent/util"
 	"github.com/totegamma/concurrent/x/jwt"
 	commitStore "github.com/totegamma/concurrent/x/store"
 	"github.com/totegamma/httpsig"
@@ -39,7 +40,7 @@ type Service struct {
 }
 
 func createToken(domain, ccid, priv string) (string, error) {
-	token, err := jwt.Create(jwt.Claims{
+	token, err := jwt.Create(core.JwtClaims{
 		JWTID:          uuid.New().String(),
 		IssuedAt:       strconv.FormatInt(time.Now().Unix(), 10),
 		ExpirationTime: strconv.FormatInt(time.Now().Add(5*time.Minute).Unix(), 10),
@@ -156,7 +157,7 @@ func (s *Service) User(ctx context.Context, id string) (types.ApObject, error) {
 		return types.ApObject{}, err
 	}
 
-	profile, err := s.client.GetProfile(ctx, s.config.FQDN, entity.CCID+"/world.concrnt.p", nil)
+	profile, err := s.client.GetProfile(ctx, entity.CCID+"/world.concrnt.p", &client.Options{Resolver: s.config.FQDN})
 	if err != nil {
 		span.RecordError(err)
 		return types.ApObject{}, err
@@ -205,7 +206,7 @@ func (s *Service) GetNoteWebURL(ctx context.Context, id string) (string, error) 
 	ctx, span := tracer.Start(ctx, "Ap.Service.GetNoteWebURL")
 	defer span.End()
 
-	msg, err := s.client.GetMessage(ctx, s.config.FQDN, id, nil)
+	msg, err := s.client.GetMessage(ctx, id, &client.Options{Resolver: s.config.FQDN})
 	if err != nil {
 		span.RecordError(err)
 		return "", err
@@ -288,8 +289,8 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 		fmt.Println("keyid", keyid)
 		fmt.Println("pemStr", pemStr)
 
-		core.JsonPrint("header", request.Header)
-		core.JsonPrint("object", object)
+		util.JsonPrint("header", request.Header)
+		util.JsonPrint("object", object)
 
 		span.RecordError(err)
 		return types.ApObject{}, errors.Wrap(err, "ap/service/inbox Verify")
@@ -380,7 +381,8 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 			span.RecordError(err)
 			return types.ApObject{}, errors.Wrap(err, "ap/service/inbox/like CreateToken")
 		}
-		targetMsg, err := s.client.GetMessage(ctx, s.config.FQDN, targetID, &client.Options{
+		targetMsg, err := s.client.GetMessage(ctx, targetID, &client.Options{
+			Resolver:  s.config.FQDN,
 			AuthToken: token,
 		})
 		if err != nil {
@@ -708,7 +710,7 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 		// import note
 		existing, err := s.store.GetApObjectReferenceByApObjectID(ctx, announceObject)
 		if err == nil {
-			message, err := s.client.GetMessage(ctx, s.config.FQDN, existing.CcObjectID, nil)
+			message, err := s.client.GetMessage(ctx, existing.CcObjectID, &client.Options{Resolver: s.config.FQDN})
 			if err == nil {
 				sourceMessage = message
 			}
@@ -860,7 +862,7 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 			return types.ApObject{}, nil
 		default:
 			// print request body
-			core.JsonPrint("Unhandled accept object", object)
+			util.JsonPrint("Unhandled accept object", object)
 			return types.ApObject{}, nil
 
 		}
@@ -973,18 +975,18 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 
 		default:
 			// print request body
-			core.JsonPrint("Unhandled Undo Object", object)
+			util.JsonPrint("Unhandled Undo Object", object)
 			return types.ApObject{}, nil
 		}
 	case "Delete":
 		deleteObject, ok := object.GetRaw("object")
 		if !ok {
-			core.JsonPrint("Delete Object", object.GetData())
+			util.JsonPrint("Delete Object", object.GetData())
 			return types.ApObject{}, errors.New("ap/service/inbox/delete Invalid Delete Object")
 		}
 		deleteID, ok := deleteObject.GetString("id")
 		if !ok {
-			core.JsonPrint("Delete Object", object.GetData())
+			util.JsonPrint("Delete Object", object.GetData())
 			return types.ApObject{}, errors.New("ap/service/inbox/delete Invalid Delete Object")
 		}
 
@@ -1054,7 +1056,7 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 
 	default:
 		// print request body
-		core.JsonPrint("Unhandled Activitypub Object", object)
+		util.JsonPrint("Unhandled Activitypub Object", object)
 		return types.ApObject{}, nil
 	}
 }

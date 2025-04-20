@@ -238,7 +238,7 @@ CHECK_VISIBILITY:
 
 		if strings.HasPrefix(object.MustGetString("inReplyTo"), "https://"+s.config.FQDN+"/ap/note/") {
 			replyToMessageID := strings.TrimPrefix(object.MustGetString("inReplyTo"), "https://"+s.config.FQDN+"/ap/note/")
-			message, err := s.client.GetMessage(ctx, s.config.FQDN, replyToMessageID, nil)
+			message, err := s.client.GetMessage(ctx, replyToMessageID, &client.Options{Resolver: s.config.FQDN})
 			if err != nil {
 				return core.Message{}, errors.Wrap(err, "message not found")
 			}
@@ -270,7 +270,7 @@ CHECK_VISIBILITY:
 					ReplyToMessageID:     ReplyToMessageID,
 					ReplyToMessageAuthor: ReplyToMessageAuthor,
 				},
-				Meta: map[string]interface{}{
+				Meta: map[string]any{
 					"apActor":          person.MustGetString("url"),
 					"apObjectRef":      object.MustGetString("id"),
 					"apPublisherInbox": person.MustGetString("inbox"),
@@ -294,7 +294,7 @@ CHECK_VISIBILITY:
 
 		if strings.HasPrefix(object.MustGetString("quoteUrl"), "https://"+s.config.FQDN+"/ap/note/") {
 			replyToMessageID := strings.TrimPrefix(object.MustGetString("quoteUrl"), "https://"+s.config.FQDN+"/ap/note/")
-			message, err := s.client.GetMessage(ctx, s.config.FQDN, replyToMessageID, nil)
+			message, err := s.client.GetMessage(ctx, replyToMessageID, &client.Options{Resolver: s.config.FQDN})
 			if err != nil {
 				return core.Message{}, errors.Wrap(err, "message not found")
 			}
@@ -326,7 +326,7 @@ CHECK_VISIBILITY:
 					RerouteMessageID:     RerouteMessageID,
 					RerouteMessageAuthor: RerouteMessageAuthor,
 				},
-				Meta: map[string]interface{}{
+				Meta: map[string]any{
 					"apActor":          person.MustGetString("url"),
 					"apObjectRef":      object.MustGetString("id"),
 					"apPublisherInbox": person.MustGetString("inbox"),
@@ -380,7 +380,7 @@ CHECK_VISIBILITY:
 						Medias: &media,
 						Emojis: &emojis,
 					},
-					Meta: map[string]interface{}{
+					Meta: map[string]any{
 						"apActor":          person.MustGetString("url"),
 						"apObjectRef":      object.MustGetString("id"),
 						"apPublisherInbox": person.MustGetString("inbox"),
@@ -417,7 +417,7 @@ CHECK_VISIBILITY:
 						},
 						Emojis: &emojis,
 					},
-					Meta: map[string]interface{}{
+					Meta: map[string]any{
 						"apActor":          person.MustGetString("url"),
 						"apObjectRef":      object.MustGetString("id"),
 						"apPublisherInbox": person.MustGetString("inbox"),
@@ -568,7 +568,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 	ctx, span := tracer.Start(ctx, "MessageToNote")
 	defer span.End()
 
-	message, err := s.client.GetMessage(ctx, s.config.FQDN, messageID, nil)
+	message, err := s.client.GetMessage(ctx, messageID, &client.Options{Resolver: s.config.FQDN})
 	if err != nil {
 		span.RecordError(err)
 		return types.ApObject{}, errors.New("message not found")
@@ -616,7 +616,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 			if len(split) != 2 {
 				continue
 			}
-			timelineDocument, err := s.client.GetTimeline(ctx, split[1], timelineFQID, nil)
+			timelineDocument, err := s.client.GetTimeline(ctx, timelineFQID, &client.Options{Resolver: split[1]})
 			if err != nil {
 				span.RecordError(err)
 				continue
@@ -727,13 +727,13 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 			return types.ApObject{}, errors.New("invalid payload")
 		}
 
-		replyAuthor, err := s.client.GetEntity(ctx, s.config.FQDN, replyDocument.Body.ReplyToMessageAuthor, nil)
+		replyAuthor, err := s.client.GetEntity(ctx, replyDocument.Body.ReplyToMessageAuthor, &client.Options{Resolver: s.config.FQDN})
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.New("entity not found")
 		}
 
-		replySource, err := s.client.GetMessage(ctx, replyAuthor.Domain, replyDocument.Body.ReplyToMessageID, nil)
+		replySource, err := s.client.GetMessage(ctx, replyDocument.Body.ReplyToMessageID, &client.Options{Resolver: replyAuthor.Domain})
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.New("message not found")
@@ -745,7 +745,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 			return types.ApObject{}, errors.New("invalid payload")
 		}
 
-		replyMeta, ok := sourceDocument.Meta.(map[string]interface{})
+		replyMeta, ok := sourceDocument.Meta.(map[string]any)
 		if !ok {
 			return types.ApObject{}, errors.New("invalid meta")
 		}
@@ -790,13 +790,13 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 			return types.ApObject{}, errors.New("invalid payload")
 		}
 
-		rerouteAuthor, err := s.client.GetEntity(ctx, s.config.FQDN, rerouteDocument.Body.RerouteMessageAuthor, nil)
+		rerouteAuthor, err := s.client.GetEntity(ctx, rerouteDocument.Body.RerouteMessageAuthor, &client.Options{Resolver: s.config.FQDN})
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.New("entity not found")
 		}
 
-		rerouteSource, err := s.client.GetMessage(ctx, rerouteAuthor.Domain, rerouteDocument.Body.RerouteMessageID, nil)
+		rerouteSource, err := s.client.GetMessage(ctx, rerouteDocument.Body.RerouteMessageID, &client.Options{Resolver: rerouteAuthor.Domain})
 		if err != nil {
 			span.RecordError(err)
 			return types.ApObject{}, errors.New("message not found")
@@ -808,7 +808,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 			return types.ApObject{}, errors.New("invalid payload")
 		}
 
-		rerouteMeta, ok := sourceDocument.Meta.(map[string]interface{})
+		rerouteMeta, ok := sourceDocument.Meta.(map[string]any)
 		if !ok {
 			return types.ApObject{}, errors.New("invalid meta")
 		}

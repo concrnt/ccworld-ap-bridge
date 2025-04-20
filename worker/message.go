@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/totegamma/concurrent/client"
 	"github.com/totegamma/concurrent/core"
 
 	"github.com/concrnt/ccworld-ap-bridge/types"
@@ -122,7 +123,7 @@ func (w *Worker) StartMessageWorker() {
 
 				timelines := make([]string, 0)
 				for _, listenTimeline := range newState.Listens {
-					timeline, err := w.client.GetTimeline(ctx, w.config.FQDN, listenTimeline, nil)
+					timeline, err := w.client.GetTimeline(ctx, listenTimeline, &client.Options{Resolver: w.config.FQDN})
 					if err != nil {
 						log.Printf("worker/message/%v GetTimeline: %v", userID, err)
 						continue
