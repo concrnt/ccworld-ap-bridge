@@ -48,7 +48,7 @@ func main() {
 
 	configPaths := []string{}
 	configPath := os.Getenv("CCWORLD_AP_BRIDGE_CONFIG")
-	if configPath == "" {
+	if configPath != "" {
 		configPaths = append(configPaths, configPath)
 	}
 
@@ -60,7 +60,7 @@ func main() {
 	}
 
 	if len(configPaths) == 0 {
-		configPaths = append(configPaths, "./etc/concrnt/config/apconfig.yaml")
+		configPaths = append(configPaths, "/etc/concrnt/config/apconfig.yaml")
 	}
 
 	config, err := util.LoadMultipleYamlFiles[Config](configPaths)
