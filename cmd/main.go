@@ -66,6 +66,13 @@ func main() {
 	config, err := util.LoadMultipleYamlFiles[Config](configPaths)
 	if err != nil {
 		slog.Error("Failed to load config: ", slog.String("error", err.Error()))
+		panic(err)
+	}
+
+	config.ApConfig.ProxyCCID, err = core.PrivKeyToAddr(config.ApConfig.ProxyPriv, "con")
+	if err != nil {
+		slog.Error("Failed to load config: ", slog.String("error", err.Error()))
+		panic(err)
 	}
 
 	slog.Info(fmt.Sprintf("ConcrntWorld Activitypub Bridge %s starting...", version))
