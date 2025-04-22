@@ -18,5 +18,4 @@ type Server struct {
 	MemcachedAddr string `yaml:"memcachedAddr"`
 	EnableTrace   bool   `yaml:"enableTrace"`
 	TraceEndpoint string `yaml:"traceEndpoint"`
-	ApiAddr       string `yaml:"apiAddr"`
 }
