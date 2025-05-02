@@ -22,9 +22,9 @@ import (
 	"github.com/concrnt/ccworld-ap-bridge/store"
 	"github.com/concrnt/ccworld-ap-bridge/types"
 	"github.com/concrnt/ccworld-ap-bridge/world"
-	"github.com/totegamma/concurrent/client"
-	"github.com/totegamma/concurrent/core"
-	commitStore "github.com/totegamma/concurrent/x/store"
+	"github.com/concrnt/concrnt/client"
+	"github.com/concrnt/concrnt/core"
+	commitStore "github.com/concrnt/concrnt/x/store"
 )
 
 var tracer = otel.Tracer("bridge")

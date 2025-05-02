@@ -5,8 +5,8 @@ import (
 	"github.com/concrnt/ccworld-ap-bridge/bridge"
 	"github.com/concrnt/ccworld-ap-bridge/store"
 	"github.com/concrnt/ccworld-ap-bridge/types"
+	"github.com/concrnt/concrnt/client"
 	"github.com/redis/go-redis/v9"
-	"github.com/totegamma/concurrent/client"
 )
 
 type Worker struct {

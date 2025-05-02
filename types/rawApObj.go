@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/totegamma/concurrent/util"
+	"github.com/concrnt/concrnt/util"
 )
 
 type RawApObj struct {

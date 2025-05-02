@@ -22,11 +22,11 @@ import (
 	"github.com/concrnt/ccworld-ap-bridge/store"
 	"github.com/concrnt/ccworld-ap-bridge/types"
 	"github.com/concrnt/ccworld-ap-bridge/world"
-	"github.com/totegamma/concurrent/client"
-	"github.com/totegamma/concurrent/core"
-	"github.com/totegamma/concurrent/util"
-	"github.com/totegamma/concurrent/x/jwt"
-	commitStore "github.com/totegamma/concurrent/x/store"
+	"github.com/concrnt/concrnt/client"
+	"github.com/concrnt/concrnt/core"
+	"github.com/concrnt/concrnt/util"
+	"github.com/concrnt/concrnt/x/jwt"
+	commitStore "github.com/concrnt/concrnt/x/store"
 	"github.com/totegamma/httpsig"
 )
 
