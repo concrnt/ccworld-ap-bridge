@@ -104,8 +104,10 @@ func htmlToMarkdown(r io.Reader) (string, error) {
 
 func (s Service) NoteToMessage(ctx context.Context, object *types.RawApObj, person *types.RawApObj, destStreams []string) (core.Message, error) {
 
+	isMisskey := true
 	content, ok := object.GetString("_misskey_content")
 	if !ok {
+		isMisskey = false
 		rawcontent := object.MustGetString("content")
 		if rawcontent != "" {
 			var err error
@@ -402,11 +404,16 @@ CHECK_VISIBILITY:
 				return core.Message{}, errors.New("empty content")
 			}
 
+			schema := world.MarkdownMessageSchema
+			if isMisskey {
+				schema = world.MisskeyMessageSchema
+			}
+
 			doc := core.MessageDocument[world.MarkdownMessage]{
 				DocumentBase: core.DocumentBase[world.MarkdownMessage]{
 					Signer: s.config.ProxyCCID,
 					Type:   "message",
-					Schema: world.MarkdownMessageSchema,
+					Schema: schema,
 					Body: world.MarkdownMessage{
 						Body: content,
 						ProfileOverride: &world.ProfileOverride{

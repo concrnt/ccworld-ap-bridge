@@ -2,6 +2,7 @@ package world
 
 const (
 	MarkdownMessageSchema = "https://schema.concrnt.world/m/markdown.json"
+	MisskeyMessageSchema  = "https://schema.concrnt.world/m/mfm.json"
 	MediaMessageSchema    = "https://schema.concrnt.world/m/media.json"
 	ReplyMessageSchema    = "https://schema.concrnt.world/m/reply.json"
 	RerouteMessageSchema  = "https://schema.concrnt.world/m/reroute.json"
