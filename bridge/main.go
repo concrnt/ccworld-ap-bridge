@@ -142,13 +142,12 @@ func (s Service) NoteToMessage(ctx context.Context, object *types.RawApObj, pers
 		}
 	}
 
+	flag := ""
 	if object.MustGetBool("sensitive") {
-		summary := "CW"
-		if object.MustGetString("summary") != "" {
-			summary = object.MustGetString("summary")
-		}
-		content = "<details>\n<summary>" + summary + "</summary>\n" + content + "\n</details>"
-		contentWithImage = "<details>\n<summary>" + summary + "</summary>\n" + contentWithImage + "\n</details>"
+		flag = "sensitive"
+	}
+	if object.MustGetString("summary") != "" {
+		flag = object.MustGetString("summary")
 	}
 
 	username := person.MustGetString("name")
@@ -268,6 +267,7 @@ CHECK_VISIBILITY:
 						Description: person.MustGetString("summary"),
 						Link:        person.MustGetString("url"),
 					},
+					Flag:                 flag,
 					Emojis:               &emojis,
 					ReplyToMessageID:     ReplyToMessageID,
 					ReplyToMessageAuthor: ReplyToMessageAuthor,
@@ -324,6 +324,7 @@ CHECK_VISIBILITY:
 						Description: person.MustGetString("summary"),
 						Link:        person.MustGetString("url"),
 					},
+					Flag:                 flag,
 					Emojis:               &emojis,
 					RerouteMessageID:     RerouteMessageID,
 					RerouteMessageAuthor: RerouteMessageAuthor,
@@ -348,9 +349,9 @@ CHECK_VISIBILITY:
 	} else {
 		media := []world.Media{}
 		for _, attachment := range object.MustGetRawSlice("attachment") {
-			flag := ""
+			mediaFlag := ""
 			if attachment.MustGetBool("sensitive") {
-				flag = "sensitive"
+				mediaFlag = "sensitive"
 			}
 
 			mediaType := attachment.MustGetString("mediaType")
@@ -361,7 +362,7 @@ CHECK_VISIBILITY:
 			media = append(media, world.Media{
 				MediaURL:  attachment.MustGetString("url"),
 				MediaType: mediaType,
-				Flag:      flag,
+				Flag:      mediaFlag,
 			})
 		}
 
@@ -379,6 +380,7 @@ CHECK_VISIBILITY:
 							Description: person.MustGetString("summary"),
 							Link:        person.MustGetString("url"),
 						},
+						Flag:   flag,
 						Medias: &media,
 						Emojis: &emojis,
 					},
@@ -422,6 +424,7 @@ CHECK_VISIBILITY:
 							Description: person.MustGetString("summary"),
 							Link:        person.MustGetString("url"),
 						},
+						Flag:   flag,
 						Emojis: &emojis,
 					},
 					Meta: map[string]any{

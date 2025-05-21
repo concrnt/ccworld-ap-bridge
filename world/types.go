@@ -24,6 +24,7 @@ type MarkdownMessage struct {
 	Body            string            `json:"body"`
 	Emojis          *map[string]Emoji `json:"emojis,omitempty"`
 	ProfileOverride *ProfileOverride  `json:"profileOverride,omitempty"`
+	Flag            string            `json:"flag,omitempty"`
 }
 
 type Media struct {
@@ -39,6 +40,7 @@ type MediaMessage struct {
 	Emojis          *map[string]Emoji `json:"emojis,omitempty"`
 	Medias          *[]Media          `json:"medias,omitempty"`
 	ProfileOverride *ProfileOverride  `json:"profileOverride,omitempty"`
+	Flag            string            `json:"flag,omitempty"`
 }
 
 type ReactionAssociation struct {
@@ -71,6 +73,7 @@ type ReplyMessage struct {
 	Body                 string            `json:"body"`
 	Emojis               *map[string]Emoji `json:"emojis"`
 	ProfileOverride      *ProfileOverride  `json:"profileOverride"`
+	Flag                 string            `json:"flag,omitempty"`
 }
 
 type RerouteAssociation struct {
@@ -85,6 +88,7 @@ type RerouteMessage struct {
 	Body                 string            `json:"body"`
 	Emojis               *map[string]Emoji `json:"emojis"`
 	ProfileOverride      *ProfileOverride  `json:"profileOverride"`
+	Flag                 string            `json:"flag,omitempty"`
 }
 
 type WhisperPolicy struct {
