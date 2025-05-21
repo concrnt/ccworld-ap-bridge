@@ -208,6 +208,7 @@ func main() {
 	ap.GET("/nodeinfo/2.0", apHandler.NodeInfo)
 	ap.GET("/acct/:id", apHandler.User)
 	ap.POST("/acct/:id/inbox", apHandler.Inbox)
+	ap.GET("/acct/:id/outbox", apHandler.Outbox)
 	ap.GET("/note/:id", apHandler.Note)
 
 	ap.POST("/inbox", apHandler.Inbox)

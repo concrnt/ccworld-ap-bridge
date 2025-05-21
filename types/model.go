@@ -142,3 +142,22 @@ type AccountStats struct {
 	Follows   []string `json:"follows"`
 	Followers []string `json:"followers"`
 }
+
+type OutboxIndex struct {
+	Context    any    `json:"@context,omitempty"`
+	ID         string `json:"id,omitempty"`
+	Type       string `json:"type,omitempty"`
+	TotalItems int    `json:"totalItems,omitempty"`
+	First      string `json:"first,omitempty"`
+	Last       string `json:"last,omitempty"`
+}
+
+type OutboxItems struct {
+	Context      any        `json:"@context,omitempty"`
+	ID           string     `json:"id,omitempty"`
+	Type         string     `json:"type,omitempty"`
+	Next         string     `json:"next,omitempty"`
+	Prev         string     `json:"prev,omitempty"`
+	PartOf       string     `json:"partOf,omitempty"`
+	OrderedItems []ApObject `json:"orderedItems,omitempty"`
+}

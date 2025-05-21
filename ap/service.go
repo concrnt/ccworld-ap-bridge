@@ -238,6 +238,65 @@ func (s *Service) Note(ctx context.Context, id string) (types.ApObject, error) {
 	return note, nil
 }
 
+/*
+https://don-dev.luhrck.com/users/totegamma/outbox
+{
+  "@context": "https://www.w3.org/ns/activitystreams",
+  "id": "https://don-dev.luhrck.com/users/totegamma/outbox",
+  "type": "OrderedCollection",
+  "totalItems": 60,
+  "first": "https://don-dev.luhrck.com/users/totegamma/outbox?page=true",
+  "last": "https://don-dev.luhrck.com/users/totegamma/outbox?min_id=0&page=true"
+}
+*/
+
+/*
+https://don-dev.luhrck.com/users/totegamma/outbox?page=true
+{
+  "@context": [
+    "https://www.w3.org/ns/activitystreams",
+    {
+      "ostatus": "http://ostatus.org#",
+      "atomUri": "ostatus:atomUri",
+      "inReplyToAtomUri": "ostatus:inReplyToAtomUri",
+      "conversation": "ostatus:conversation",
+      "sensitive": "as:sensitive",
+      "toot": "http://joinmastodon.org/ns#",
+      "votersCount": "toot:votersCount",
+      "Hashtag": "as:Hashtag"
+    }
+  ],
+  "id": "https://don-dev.luhrck.com/users/totegamma/outbox?page=true",
+  "type": "OrderedCollectionPage",
+  "next": "https://don-dev.luhrck.com/users/totegamma/outbox?max_id=113912980868238695&page=true",
+  "prev": "https://don-dev.luhrck.com/users/totegamma/outbox?min_id=114543856390108463&page=true",
+  "partOf": "https://don-dev.luhrck.com/users/totegamma/outbox",
+  "orderedItems": [
+    {
+      "id": "https://don-dev.luhrck.com/users/totegamma/statuses/114543856390108463/activity",
+      "type": "Create",
+      "actor": "https://don-dev.luhrck.com/users/totegamma",
+      "published": "2025-05-21T04:09:03Z",
+      "to": [
+        "https://www.w3.org/ns/activitystreams#Public"
+      ],
+      "cc": [
+        "https://don-dev.luhrck.com/users/totegamma/followers"
+      ],
+      "object": {
+*/
+
+func (s *Service) OutboxIndex(ctx context.Context, id string) types.OutboxIndex {
+	return types.OutboxIndex{
+		Context:    "https://www.w3.org/ns/activitystreams",
+		ID:         "https://" + s.config.FQDN + "/ap/acct/" + id + "/outbox",
+		Type:       "OrderedCollectionPage",
+		TotalItems: 0,
+		First:      "https://" + s.config.FQDN + "/ap/acct/" + id + "/outbox?page=true",
+		Last:       "https://" + s.config.FQDN + "/ap/acct/" + id + "/outbox?min_id=0&page=true",
+	}
+}
+
 func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId string, request *http.Request) (types.ApObject, error) {
 	ctx, span := tracer.Start(ctx, "Ap.Service.Inbox")
 	defer span.End()

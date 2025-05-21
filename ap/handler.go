@@ -184,3 +184,18 @@ func (h Handler) Inbox(c echo.Context) error {
 	c.Response().Header().Set("Content-Type", "application/activity+json")
 	return c.JSON(http.StatusOK, result)
 }
+
+func (h Handler) Outbox(c echo.Context) error {
+	ctx, span := tracer.Start(c.Request().Context(), "Outbox")
+	defer span.End()
+
+	id := c.Param("id")
+	if id == "" {
+		return c.String(http.StatusBadRequest, "Invalid username")
+	}
+
+	result := h.service.OutboxIndex(ctx, id)
+
+	c.Response().Header().Set("Content-Type", "application/activity+json")
+	return c.JSON(http.StatusOK, result)
+}
