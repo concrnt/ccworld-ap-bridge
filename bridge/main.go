@@ -727,6 +727,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 			To:             []string{"https://www.w3.org/ns/activitystreams#Public"},
 			Tag:            tags,
 			Attachment:     attachments,
+			CC:             []string{},
 		}, nil
 
 	} else if document.Schema == world.ReplyMessageSchema { // Reply
@@ -849,6 +850,7 @@ func (s Service) MessageToNote(ctx context.Context, messageID string) (types.ApO
 			MisskeyContent: text,
 			QuoteURL:       ref,
 			To:             []string{"https://www.w3.org/ns/activitystreams#Public"},
+			CC:             []string{},
 		}, nil
 	} else {
 		return types.ApObject{}, errors.New("invalid schema")

@@ -41,6 +41,21 @@ func (r *RawApObj) get(key string) (any, bool) {
 	return value, true
 }
 
+func (r *RawApObj) Set(key string, value any) {
+	keys := strings.Split(key, ".")
+	var current map[string]any = r.data
+	for i, k := range keys {
+		if i == len(keys)-1 {
+			current[k] = value
+			return
+		}
+		if _, ok := current[k]; !ok {
+			current[k] = make(map[string]any)
+		}
+		current = current[k].(map[string]any)
+	}
+}
+
 func (r *RawApObj) GetRaw(key string) (*RawApObj, bool) {
 	value, ok := r.get(key)
 	if !ok {
