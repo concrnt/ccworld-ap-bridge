@@ -147,7 +147,7 @@ type OutboxIndex struct {
 	Context    any    `json:"@context,omitempty"`
 	ID         string `json:"id,omitempty"`
 	Type       string `json:"type,omitempty"`
-	TotalItems int    `json:"totalItems,omitempty"`
+	TotalItems int    `json:"totalItems"`
 	First      string `json:"first,omitempty"`
 	Last       string `json:"last,omitempty"`
 }
