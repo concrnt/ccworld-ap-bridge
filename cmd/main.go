@@ -200,6 +200,7 @@ func main() {
 		})
 	})
 
+	e.GET("/.well-known/host-meta", apHandler.HostMeta)
 	e.GET("/.well-known/webfinger", apHandler.WebFinger)
 	e.GET("/.well-known/nodeinfo", apHandler.NodeInfoWellKnown)
 

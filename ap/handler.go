@@ -24,6 +24,20 @@ func NewHandler(service *Service) Handler {
 	return Handler{service}
 }
 
+func (h Handler) HostMeta(c echo.Context) error {
+	ctx, span := tracer.Start(c.Request().Context(), "HostMeta")
+	defer span.End()
+
+	result, err := h.service.HostMeta(ctx)
+	if err != nil {
+		span.RecordError(err)
+		return c.String(http.StatusInternalServerError, "Internal server error: "+err.Error())
+	}
+
+	c.Response().Header().Set("Content-Type", "application/xrd+xml")
+	return c.String(http.StatusOK, result)
+}
+
 func (h Handler) WebFinger(c echo.Context) error {
 	ctx, span := tracer.Start(c.Request().Context(), "WebFinger")
 	defer span.End()

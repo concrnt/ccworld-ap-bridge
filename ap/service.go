@@ -69,6 +69,16 @@ func NewService(
 	}
 }
 
+func (s *Service) HostMeta(ctx context.Context) (string, error) {
+	ctx, span := tracer.Start(ctx, "Ap.Service.HostMeta")
+	defer span.End()
+
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<XRD xmlns="http://docs.oasis-open.org/ns/xri/xrd-1.0">
+	<Link rel="lrdd" type="application/xrd+xml" template="https://%s/.well-known/webfinger?resource={uri}"/>
+</XRD>`, s.config.FQDN), nil
+}
+
 func (s *Service) WebFinger(ctx context.Context, resource string) (types.WebFinger, error) {
 	ctx, span := tracer.Start(ctx, "Ap.Service.WebFinger")
 	defer span.End()
