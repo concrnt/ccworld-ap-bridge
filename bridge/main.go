@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -103,6 +104,10 @@ func htmlToMarkdown(r io.Reader) (string, error) {
 }
 
 func (s Service) NoteToMessage(ctx context.Context, object *types.RawApObj, person *types.RawApObj, destStreams []string) (core.Message, error) {
+
+	idUrl, _ := url.Parse(person.MustGetString("id"))
+	hostname := idUrl.Hostname()
+	actorID := "@" + person.MustGetString("preferredUsername") + "@" + hostname
 
 	isMisskey := true
 	content, ok := object.GetString("_misskey_content")
@@ -262,10 +267,9 @@ CHECK_VISIBILITY:
 				Body: world.ReplyMessage{
 					Body: contentWithImage,
 					ProfileOverride: &world.ProfileOverride{
-						Username:    username,
-						Avatar:      person.MustGetString("icon.url"),
-						Description: person.MustGetString("summary"),
-						Link:        person.MustGetString("url"),
+						Username: username,
+						Avatar:   person.MustGetString("icon.url"),
+						Link:     person.MustGetString("url"),
 					},
 					Flag:                 flag,
 					Emojis:               &emojis,
@@ -273,6 +277,7 @@ CHECK_VISIBILITY:
 					ReplyToMessageAuthor: ReplyToMessageAuthor,
 				},
 				Meta: map[string]any{
+					"apActorId":        actorID,
 					"apActor":          person.MustGetString("url"),
 					"apObjectRef":      object.MustGetString("id"),
 					"apPublisherInbox": person.MustGetString("inbox"),
@@ -319,10 +324,9 @@ CHECK_VISIBILITY:
 				Body: world.RerouteMessage{
 					Body: contentWithImage,
 					ProfileOverride: &world.ProfileOverride{
-						Username:    username,
-						Avatar:      person.MustGetString("icon.url"),
-						Description: person.MustGetString("summary"),
-						Link:        person.MustGetString("url"),
+						Username: username,
+						Avatar:   person.MustGetString("icon.url"),
+						Link:     person.MustGetString("url"),
 					},
 					Flag:                 flag,
 					Emojis:               &emojis,
@@ -330,6 +334,7 @@ CHECK_VISIBILITY:
 					RerouteMessageAuthor: RerouteMessageAuthor,
 				},
 				Meta: map[string]any{
+					"apActorId":        actorID,
 					"apActor":          person.MustGetString("url"),
 					"apObjectRef":      object.MustGetString("id"),
 					"apPublisherInbox": person.MustGetString("inbox"),
@@ -375,16 +380,16 @@ CHECK_VISIBILITY:
 					Body: world.MediaMessage{
 						Body: content,
 						ProfileOverride: &world.ProfileOverride{
-							Username:    username,
-							Avatar:      person.MustGetString("icon.url"),
-							Description: person.MustGetString("summary"),
-							Link:        person.MustGetString("url"),
+							Username: username,
+							Avatar:   person.MustGetString("icon.url"),
+							Link:     person.MustGetString("url"),
 						},
 						Flag:   flag,
 						Medias: &media,
 						Emojis: &emojis,
 					},
 					Meta: map[string]any{
+						"apActorId":        actorID,
 						"apActor":          person.MustGetString("url"),
 						"apObjectRef":      object.MustGetString("id"),
 						"apPublisherInbox": person.MustGetString("inbox"),
@@ -419,15 +424,15 @@ CHECK_VISIBILITY:
 					Body: world.MarkdownMessage{
 						Body: content,
 						ProfileOverride: &world.ProfileOverride{
-							Username:    username,
-							Avatar:      person.MustGetString("icon.url"),
-							Description: person.MustGetString("summary"),
-							Link:        person.MustGetString("url"),
+							Username: username,
+							Avatar:   person.MustGetString("icon.url"),
+							Link:     person.MustGetString("url"),
 						},
 						Flag:   flag,
 						Emojis: &emojis,
 					},
 					Meta: map[string]any{
+						"apActorId":        actorID,
 						"apActor":          person.MustGetString("url"),
 						"apObjectRef":      object.MustGetString("id"),
 						"apPublisherInbox": person.MustGetString("inbox"),
@@ -492,10 +497,9 @@ CHECK_VISIBILITY:
 					MessageID:     created.Content.ID,
 					MessageAuthor: created.Content.Author,
 					ProfileOverride: &world.ProfileOverride{
-						Username:    username,
-						Avatar:      person.MustGetString("icon.url"),
-						Description: person.MustGetString("summary"),
-						Link:        object.MustGetString("actor"),
+						Username: username,
+						Avatar:   person.MustGetString("icon.url"),
+						Link:     object.MustGetString("actor"),
 					},
 				},
 				SignedAt: date,
@@ -520,10 +524,9 @@ CHECK_VISIBILITY:
 					MessageID:     created.Content.ID,
 					MessageAuthor: created.Content.Author,
 					ProfileOverride: &world.ProfileOverride{
-						Username:    username,
-						Avatar:      person.MustGetString("icon.url"),
-						Description: person.MustGetString("summary"),
-						Link:        object.MustGetString("actor"),
+						Username: username,
+						Avatar:   person.MustGetString("icon.url"),
+						Link:     object.MustGetString("actor"),
 					},
 				},
 				SignedAt: date,
