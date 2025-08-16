@@ -15,8 +15,6 @@ type Emoji struct {
 type ProfileOverride struct {
 	Username    string `json:"username,omitempty"`
 	Avatar      string `json:"avatar,omitempty"`
-	Description string `json:"description,omitempty"`
-	Link        string `json:"link,omitempty"`
 	CharacterID string `json:"characterID,omitempty"`
 }
 

@@ -486,6 +486,10 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 			username = person.MustGetString("preferredUsername")
 		}
 
+		idUrl, _ := url.Parse(person.MustGetString("id"))
+		hostname := idUrl.Hostname()
+		actorID := "@" + person.MustGetString("preferredUsername") + "@" + hostname
+
 		tag, _ := object.GetRaw("tag")
 
 		var document []byte
@@ -498,14 +502,13 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 					Schema: world.LikeAssociationSchema,
 					Body: world.LikeAssociation{
 						ProfileOverride: &world.ProfileOverride{
-							Username:    username,
-							Avatar:      person.MustGetString("icon.url"),
-							Description: person.MustGetString("summary"),
-							Link:        object.MustGetString("actor"),
+							Username: username,
+							Avatar:   person.MustGetString("icon.url"),
 						},
 					},
 					Meta: map[string]any{
-						"apActor": object.MustGetString("actor"),
+						"apActorId": actorID,
+						"apActor":   object.MustGetString("actor"),
 					},
 					SignedAt: time.Now(),
 				},
@@ -530,14 +533,13 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 						Shortcode: tag.MustGetString("name"),
 						ImageURL:  tag.MustGetString("icon.url"),
 						ProfileOverride: &world.ProfileOverride{
-							Username:    username,
-							Avatar:      person.MustGetString("icon.url"),
-							Description: person.MustGetString("summary"),
-							Link:        object.MustGetString("actor"),
+							Username: username,
+							Avatar:   person.MustGetString("icon.url"),
 						},
 					},
 					Meta: map[string]any{
-						"apActor": object.MustGetString("actor"),
+						"apActorId": actorID,
+						"apActor":   object.MustGetString("actor"),
 					},
 					SignedAt: time.Now(),
 				},
@@ -823,6 +825,10 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 			username = person.MustGetString("preferredUsername")
 		}
 
+		idUrl, _ := url.Parse(person.MustGetString("id"))
+		hostname := idUrl.Hostname()
+		actorID := "@" + person.MustGetString("preferredUsername") + "@" + hostname
+
 		doc := core.MessageDocument[world.RerouteMessage]{
 			DocumentBase: core.DocumentBase[world.RerouteMessage]{
 				Signer:   s.config.ProxyCCID,
@@ -834,13 +840,12 @@ func (s *Service) Inbox(ctx context.Context, object *types.RawApObj, inboxId str
 					RerouteMessageAuthor: sourceMessage.Author,
 					Body:                 object.MustGetString("content"),
 					ProfileOverride: &world.ProfileOverride{
-						Username:    username,
-						Avatar:      person.MustGetString("icon.url"),
-						Description: person.MustGetString("summary"),
-						Link:        object.MustGetString("actor"),
+						Username: username,
+						Avatar:   person.MustGetString("icon.url"),
 					},
 				},
 				Meta: map[string]any{
+					"apActorId":        actorID,
 					"apActor":          person.MustGetString("url"),
 					"apObject":         object.MustGetString("id"),
 					"apPublisherInbox": person.MustGetString("inbox"),

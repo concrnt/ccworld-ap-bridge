@@ -269,7 +269,6 @@ CHECK_VISIBILITY:
 					ProfileOverride: &world.ProfileOverride{
 						Username: username,
 						Avatar:   person.MustGetString("icon.url"),
-						Link:     person.MustGetString("url"),
 					},
 					Flag:                 flag,
 					Emojis:               &emojis,
@@ -326,7 +325,6 @@ CHECK_VISIBILITY:
 					ProfileOverride: &world.ProfileOverride{
 						Username: username,
 						Avatar:   person.MustGetString("icon.url"),
-						Link:     person.MustGetString("url"),
 					},
 					Flag:                 flag,
 					Emojis:               &emojis,
@@ -382,7 +380,6 @@ CHECK_VISIBILITY:
 						ProfileOverride: &world.ProfileOverride{
 							Username: username,
 							Avatar:   person.MustGetString("icon.url"),
-							Link:     person.MustGetString("url"),
 						},
 						Flag:   flag,
 						Medias: &media,
@@ -426,7 +423,6 @@ CHECK_VISIBILITY:
 						ProfileOverride: &world.ProfileOverride{
 							Username: username,
 							Avatar:   person.MustGetString("icon.url"),
-							Link:     person.MustGetString("url"),
 						},
 						Flag:   flag,
 						Emojis: &emojis,
@@ -499,7 +495,6 @@ CHECK_VISIBILITY:
 					ProfileOverride: &world.ProfileOverride{
 						Username: username,
 						Avatar:   person.MustGetString("icon.url"),
-						Link:     object.MustGetString("actor"),
 					},
 				},
 				SignedAt: date,
@@ -526,8 +521,11 @@ CHECK_VISIBILITY:
 					ProfileOverride: &world.ProfileOverride{
 						Username: username,
 						Avatar:   person.MustGetString("icon.url"),
-						Link:     object.MustGetString("actor"),
 					},
+				},
+				Meta: map[string]any{
+					"apActorId": actorID,
+					"apActor":   person.MustGetString("url"),
 				},
 				SignedAt: date,
 			},
